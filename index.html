@@ -1,0 +1,1043 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hockey Schedule Analyzer</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2028;
+    --panel-2: #232b36;
+    --border: #2d3744;
+    --text: #e8edf2;
+    --text-dim: #8a96a8;
+    --accent: #5ab4ff;
+    --accent-2: #7be3a4;
+    --warn: #ffb84a;
+    --bad: #ff6b6b;
+    --good: #7be3a4;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--bg); color: var(--text); margin: 0; font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  a { color: var(--accent); }
+  h1 { font-size: 20px; margin: 0; }
+  h2 { font-size: 15px; margin: 0 0 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .08em; }
+  h3 { font-size: 14px; margin: 14px 0 6px; }
+  button, input, textarea, select {
+    font: inherit; color: inherit; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 10px;
+  }
+  button { cursor: pointer; }
+  button:hover { background: #2c3744; }
+  button.primary { background: var(--accent); color: #001827; border-color: transparent; font-weight: 600; }
+  button.primary:hover { background: #7cc5ff; }
+  button.ghost { background: transparent; }
+  input[type="text"] { width: 100%; }
+  textarea { width: 100%; min-height: 140px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border-bottom: 1px solid var(--border); padding: 5px 8px; text-align: left; }
+  th { color: var(--text-dim); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; cursor: pointer; user-select: none; }
+  th:hover { color: var(--text); }
+  tbody tr:hover { background: #1f2630; }
+  .container { max-width: 1180px; margin: 0 auto; padding: 18px 22px 60px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 14px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .grow { flex: 1; min-width: 240px; }
+  .muted { color: var(--text-dim); }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--panel-2); color: var(--text-dim); font-size: 11.5px; }
+  .pill.playoff { background: #3a2e1a; color: var(--warn); }
+  .pill.regular { background: #1a3a2a; color: var(--good); }
+  .banner { padding: 8px 12px; border-radius: 6px; background: #142836; border: 1px solid #1d3c52; color: var(--accent); font-size: 13px; }
+  .banner.error { background: #3a1818; border-color: #5a2424; color: #ff9f9f; }
+  .banner.warn { background: #3a2e1a; border-color: #5a4a24; color: var(--warn); }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .grid-2 { grid-template-columns: 1fr; } }
+  .bar-row { display: grid; grid-template-columns: 140px 1fr 40px; gap: 8px; align-items: center; padding: 2px 0; }
+  .bar { height: 14px; background: var(--accent); border-radius: 3px; min-width: 1px; }
+  .bar.bad { background: var(--bad); }
+  .bar.warn { background: var(--warn); }
+  .bar.good { background: var(--good); }
+  .ha-row { display: grid; grid-template-columns: 140px 1fr 60px; gap: 8px; align-items: center; padding: 2px 0; }
+  .ha-track { height: 14px; display: flex; gap: 2px; }
+  .ha-track .h { background: var(--accent); border-radius: 3px 0 0 3px; }
+  .ha-track .a { background: var(--accent-2); border-radius: 0 3px 3px 0; }
+  .heatmap th, .heatmap td { text-align: center; min-width: 56px; }
+  .heatmap td.cell { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .heatmap td.team { text-align: left; font-weight: 500; min-width: 140px; }
+  .b2b-list { padding-left: 18px; }
+  .b2b-list li { padding: 4px 0; }
+  .cal-month { margin-bottom: 18px; }
+  .cal-month h3 { margin: 0 0 6px; color: var(--text-dim); font-weight: 600; letter-spacing: .04em; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+  .cal-dow { color: var(--text-dim); font-size: 11px; text-align: center; padding: 2px 0; text-transform: uppercase; letter-spacing: .04em; }
+  .cal-day { background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; min-height: 80px; padding: 3px; display: flex; flex-direction: column; gap: 2px; }
+  .cal-empty { background: transparent; border: 1px dashed transparent; }
+  .cal-date { font-size: 11px; color: var(--text-dim); font-weight: 600; }
+  .cal-day.has-game .cal-date { color: var(--text); }
+  .cal-game { display: flex; align-items: stretch; font-size: 10.5px; border-radius: 3px; overflow: hidden; line-height: 1.1; }
+  .cal-game .time { padding: 2px 4px; background: rgba(255,255,255,0.06); color: var(--text-dim); font-variant-numeric: tabular-nums; width: 48px; flex: 0 0 48px; text-align: center; }
+  .cal-game .half { flex: 1; padding: 2px 4px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+  .cal-game .vs { padding: 2px; color: var(--text-dim); font-size: 9px; align-self: center; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 3px; }
+  .swap-card {
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; background: var(--panel-2);
+    display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center;
+  }
+  .swap-card .games { font-size: 13px; }
+  .swap-card .delta { color: var(--good); font-weight: 700; }
+  .swap-card .breakdown { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .footnote { color: var(--text-dim); font-size: 12px; margin-top: 8px; }
+  details > summary { cursor: pointer; color: var(--text-dim); padding: 4px 0; }
+  details[open] > summary { color: var(--text); }
+  .kbd { font-family: ui-monospace, monospace; font-size: 12px; background: var(--panel-2); padding: 1px 5px; border-radius: 3px; border: 1px solid var(--border); }
+  .err { color: var(--bad); }
+  .num { font-variant-numeric: tabular-nums; }
+  .tag { display: inline-block; padding: 0 5px; border-radius: 3px; background: var(--panel-2); color: var(--text-dim); font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="panel">
+    <div class="row">
+      <h1>🏒 Hockey Schedule Analyzer</h1>
+      <span class="muted" id="loaded-summary"></span>
+    </div>
+    <div class="row" style="margin-top: 12px;">
+      <input id="url-input" type="text" class="grow"
+        placeholder="Paste DaySmart league URL (e.g. apps.daysmartrecreation.com/.../leagues/4356) or 'ocsportsplex/4356'">
+      <button id="load-btn" class="primary">Load</button>
+      <button id="paste-toggle" class="ghost">Paste mode</button>
+      <button id="reset-btn" class="ghost" title="Revert all applied swaps">↺ Reset</button>
+      <button id="clear-btn" class="ghost" title="Wipe local cache">🗑 Clear</button>
+    </div>
+    <div id="paste-area" style="display:none; margin-top: 10px;">
+      <textarea id="paste-input" placeholder="Paste the schedule table copied from the league site..."></textarea>
+      <div class="row" style="margin-top: 8px;">
+        <button id="paste-parse-btn" class="primary">Parse pasted text</button>
+        <span class="muted">Tip: select all rows in the schedule table and copy. Pagination tokens like <span class="kbd">«</span> <span class="kbd">»</span> are filtered automatically.</span>
+      </div>
+    </div>
+    <div id="status" style="margin-top: 10px;"></div>
+  </div>
+
+  <div id="dashboard" style="display:none;">
+
+    <div class="panel">
+      <h2>Schedule</h2>
+      <div class="row" style="margin-bottom: 8px;">
+        <label class="muted">Playoffs start: <input type="date" id="playoff-cutoff" style="padding: 4px 6px;"></label>
+        <label class="muted"><input type="checkbox" id="include-playoffs"> Include playoffs in fairness analysis</label>
+        <span class="grow"></span>
+        <span class="muted" id="penalty-summary"></span>
+      </div>
+      <div style="max-height: 300px; overflow: auto;">
+        <table id="schedule-table">
+          <thead>
+            <tr>
+              <th data-sort="idx">#</th>
+              <th data-sort="date">Date</th>
+              <th data-sort="slotKey">Slot</th>
+              <th data-sort="home">Home</th>
+              <th data-sort="away">Away</th>
+              <th data-sort="kind">Kind</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="panel">
+        <h2>Games per team</h2>
+        <div id="games-per-team"></div>
+        <div class="footnote" id="gpt-note"></div>
+      </div>
+      <div class="panel">
+        <h2>Home / Away balance</h2>
+        <div id="home-away"></div>
+        <div class="footnote">
+          <span style="display:inline-block;width:10px;height:10px;background:var(--accent);border-radius:2px;vertical-align:middle;"></span> home
+          &nbsp;&nbsp;
+          <span style="display:inline-block;width:10px;height:10px;background:var(--accent-2);border-radius:2px;vertical-align:middle;"></span> away
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Calendar</h2>
+      <div class="legend" id="cal-legend"></div>
+      <div id="calendar"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Slot distribution</h2>
+      <div class="row" style="margin-bottom: 10px;">
+        <label class="muted">View:
+          <select id="slot-view">
+            <option value="buckets">Early / Middle / Late</option>
+            <option value="exact">Exact times</option>
+          </select>
+        </label>
+        <span id="bucket-thresholds">
+          <label class="muted">Early before <input type="time" id="early-end" style="padding:4px 6px; width: 110px;"></label>
+          <label class="muted">Late at/after <input type="time" id="late-start" style="padding:4px 6px; width: 110px;"></label>
+        </span>
+      </div>
+      <div style="overflow-x: auto;">
+        <table class="heatmap" id="heatmap"></table>
+      </div>
+      <div class="footnote">Cell color brightness = how far the count is from the expected per-team value. Red = too many, blue = too few. Swap suggestions optimize for whichever view you've selected.</div>
+    </div>
+
+    <div class="panel">
+      <h2>Same-matchup back-to-back</h2>
+      <ul class="b2b-list" id="b2b-list"></ul>
+    </div>
+
+    <div class="panel">
+      <h2>Suggested single swaps</h2>
+      <div id="swap-list"></div>
+      <div class="footnote">A swap exchanges the date/time slot between two games — matchups don't change, only when each is played. Top 10 improvements shown.</div>
+    </div>
+
+  </div>
+
+  <div class="panel" style="margin-top: 30px;">
+    <details>
+      <summary>About / how this works</summary>
+      <p>Loads the schedule from DaySmart Recreation's public JSON:API (no login, no scraping). Stores in your browser's localStorage. Detects four issue classes and lets you simulate single-swap fixes that improve fairness.</p>
+      <p><strong>Issue weights</strong> (penalty function): game-count variance ×4, home/away imbalance ×2, slot-distribution variance ×1, same-matchup back-to-back ×8.</p>
+      <p><strong>Caveats:</strong> A date-swap can't fix uneven game counts or home/away imbalance — those need a matchup change. The swap engine still suggests fixes for slot fairness and back-to-back issues.</p>
+    </details>
+  </div>
+
+</div>
+
+<script>
+"use strict";
+
+// ---------- Constants ----------
+
+const STORAGE_KEY = "hockey-schedule-v1";
+const API_BASE = "https://api.daysmartrecreation.com/v1";
+const FREE_AGENT_PREFIX = "*";
+
+const W_GAMECOUNT = 4;
+const W_HOMEAWAY = 2;
+const W_SLOT = 1;
+const W_B2B = 8;
+
+// Team colors → background; pick text color for contrast.
+const TEAM_STYLE = {
+  "Pylons":              { bg: "#e07a1f", fg: "#1a0c00", abbr: "PYL" },
+  "Tropical Depression": { bg: "#2e8b3d", fg: "#ffffff", abbr: "TD"  },
+  "Ice Aged":            { bg: "#2563eb", fg: "#ffffff", abbr: "IA"  },
+  "Golden Pints":        { bg: "#d4af37", fg: "#1a1200", abbr: "GP"  },
+  "Rusty Blades":        { bg: "#c83232", fg: "#ffffff", abbr: "RB"  },
+  "Brewins":             { bg: "#fff200", fg: "#1a1200", abbr: "BRW" },
+  "Mid-Ice Crisis":      { bg: "#7c3aed", fg: "#ffffff", abbr: "MIC" },
+  "Nailers":             { bg: "#6b7280", fg: "#ffffff", abbr: "NAI" },
+};
+const FALLBACK_STYLE = { bg: "#3a4250", fg: "#ffffff", abbr: "?" };
+function styleOf(team) { return TEAM_STYLE[team] || { ...FALLBACK_STYLE, abbr: (team||"?").slice(0,3).toUpperCase() }; }
+
+// ---------- DOM helper ----------
+
+function h(tag, props, ...children) {
+  const el = document.createElement(tag);
+  if (props) {
+    for (const [k, v] of Object.entries(props)) {
+      if (v == null || v === false) continue;
+      if (k === "class") el.className = v;
+      else if (k === "style" && typeof v === "object") Object.assign(el.style, v);
+      else if (k === "data" && typeof v === "object") Object.assign(el.dataset, v);
+      else if (k.startsWith("on") && typeof v === "function") el.addEventListener(k.slice(2).toLowerCase(), v);
+      else if (k === "text") el.textContent = v;
+      else el.setAttribute(k, v);
+    }
+  }
+  for (const c of children.flat(Infinity)) {
+    if (c == null || c === false) continue;
+    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return el;
+}
+
+function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+function mount(el, ...nodes) { clear(el); for (const n of nodes.flat(Infinity)) if (n) el.append(n); }
+
+// ---------- State ----------
+
+let state = {
+  source: null,
+  league: null,
+  teams: [],
+  games: [],
+  originalGames: [],
+  swapsApplied: [],
+  includePlayoffs: false,
+  playoffCutoff: null,   // YYYY-MM-DD; games on/after this date are playoffs
+  slotView: "buckets",   // "exact" | "buckets"
+  earlyEnd: "21:00",     // games starting before this = early
+  lateStart: "22:30",    // games starting at/after this = late
+  sortKey: "date",
+  sortAsc: true,
+};
+
+function save() {
+  const payload = {
+    ...state,
+    games: state.games.map(serializeGame),
+    originalGames: state.originalGames.map(serializeGame),
+  };
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch (e) {}
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const p = JSON.parse(raw);
+    state = {
+      ...state,
+      ...p,
+      games: (p.games || []).map(deserializeGame),
+      originalGames: (p.originalGames || []).map(deserializeGame),
+    };
+    return true;
+  } catch (e) { return false; }
+}
+
+function serializeGame(g) {
+  return { ...g, date: g.date instanceof Date ? g.date.toISOString() : g.date };
+}
+function deserializeGame(g) {
+  return { ...g, date: new Date(g.date) };
+}
+
+// ---------- URL parsing ----------
+
+function parseInputRef(s) {
+  s = (s || "").trim();
+  if (!s) return null;
+  let m = s.match(/online\/([a-z0-9_-]+)\/leagues\/(\d+)/i);
+  if (m) return { company: m[1], leagueId: m[2] };
+  m = s.match(/^([a-z0-9_-]+)[\/\s,]+(\d+)$/i);
+  if (m) return { company: m[1], leagueId: m[2] };
+  m = s.match(/^(\d+)$/);
+  if (m && state.source?.company) return { company: state.source.company, leagueId: m[1] };
+  return null;
+}
+
+// ---------- API loader ----------
+
+async function fetchLeague(company, leagueId) {
+  const headers = { "Accept": "application/vnd.api+json" };
+  const u = (path) => `${API_BASE}/${path}?company=${encodeURIComponent(company)}`;
+
+  const [leagueRes, teamsRes, eventsRes] = await Promise.all([
+    fetch(u(`leagues/${leagueId}`), { headers }),
+    fetch(u(`leagues/${leagueId}/teams`) + `&page%5Bsize%5D=100`, { headers }),
+    fetch(u(`events`) + `&filter%5Bleague_id%5D=${leagueId}&page%5Bsize%5D=500`, { headers }),
+  ]);
+  if (!leagueRes.ok) throw new Error(`League fetch failed: ${leagueRes.status}`);
+  if (!teamsRes.ok) throw new Error(`Teams fetch failed: ${teamsRes.status}`);
+  if (!eventsRes.ok) throw new Error(`Events fetch failed: ${eventsRes.status}`);
+
+  const leagueJson = await leagueRes.json();
+  const teamsJson = await teamsRes.json();
+  const eventsJson = await eventsRes.json();
+
+  const leagueAttrs = leagueJson.data?.attributes || {};
+  const league = {
+    name: leagueAttrs.name || `League ${leagueId}`,
+    startDate: leagueAttrs.start_date || null,
+    endDate: leagueAttrs.end_date || null,
+  };
+
+  const teams = (teamsJson.data || [])
+    .map(t => ({ id: String(t.id), name: t.attributes?.name || `Team ${t.id}` }))
+    .filter(t => !t.name.startsWith(FREE_AGENT_PREFIX));
+
+  const teamById = Object.fromEntries(teams.map(t => [t.id, t.name]));
+
+  const games = (eventsJson.data || [])
+    .filter(e => e.attributes?.event_type_id === "g")
+    .map(e => {
+      const a = e.attributes || {};
+      const home = teamById[String(a.hteam_id)] || null;
+      const away = teamById[String(a.vteam_id)] || null;
+      return {
+        id: `api-${e.id}`,
+        date: parseLocal(a.start),
+        home, away,
+        location: a.resource_id ? `Resource ${a.resource_id}` : null,
+        _apiPlayoff: a.sub_type === "playoff",
+        isPlayoff: false,
+        slotKey: null,
+      };
+    })
+    .filter(g => g.home && g.away && !isNaN(g.date));
+
+  finalizeGames(games);
+  return { league, teams, games };
+}
+
+function parseLocal(iso) {
+  if (!iso) return new Date(NaN);
+  if (/Z|[+\-]\d\d:?\d\d$/.test(iso)) return new Date(iso);
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return new Date(iso);
+  return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0));
+}
+
+// ---------- Paste parser ----------
+
+function parsePastedText(text) {
+  const PAGINATION = /^\s*(«|»|…|\.\.\.|\d+\s*\(current\)|\d+)\s*$/;
+  const HEADER = /home\s*\t.*away/i;
+
+  const lines = text.split(/\r?\n/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0)
+    .filter(s => !PAGINATION.test(s))
+    .filter(s => !HEADER.test(s));
+
+  const games = [];
+  for (let i = 0; i + 2 < lines.length; ) {
+    const teamLine = lines[i];
+    const locLine = lines[i + 1];
+    const dtLine = lines[i + 2];
+    const fields = teamLine.split(/\t+/).map(s => s.trim()).filter(Boolean);
+    const dt = parsePasteDate(dtLine);
+    if (fields.length >= 2 && !isNaN(dt)) {
+      games.push({
+        id: `paste-${games.length + 1}`,
+        date: dt,
+        home: fields[0],
+        away: fields[1],
+        location: locLine,
+        _apiPlayoff: false,
+        isPlayoff: false,
+        slotKey: null,
+      });
+      i += 3;
+    } else {
+      i += 1;
+    }
+  }
+  finalizeGames(games);
+  return games;
+}
+
+function parsePasteDate(s) {
+  const m = s.match(/^\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s*([ap]m)\s*$/i);
+  if (!m) return new Date(NaN);
+  let [, mo, da, yr, hh, mm, ap] = m;
+  hh = +hh; if (ap.toLowerCase() === "pm" && hh !== 12) hh += 12;
+  if (ap.toLowerCase() === "am" && hh === 12) hh = 0;
+  return new Date(+yr, +mo - 1, +da, hh, +mm);
+}
+
+// ---------- Common post-processing ----------
+
+const WEEKDAY = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+
+function finalizeGames(games) {
+  games.sort((a, b) => a.date - b.date);
+  for (const g of games) {
+    g.slotKey = `${WEEKDAY[g.date.getDay()]} ${pad2(g.date.getHours())}:${pad2(g.date.getMinutes())}`;
+  }
+  applyPlayoffCutoff(games);
+}
+
+function applyPlayoffCutoff(games) {
+  const cutoffMs = state.playoffCutoff ? new Date(state.playoffCutoff).getTime() : null;
+  for (const g of games) {
+    const fromApi = g._apiPlayoff === true;
+    const fromCutoff = cutoffMs != null && g.date.getTime() >= cutoffMs;
+    g.isPlayoff = fromApi || fromCutoff;
+  }
+}
+
+function pad2(n) { return String(n).padStart(2, "0"); }
+
+// ---------- Analyzer ----------
+
+const BUCKET_ORDER = ["early", "middle", "late"];
+const BUCKET_LABEL = { early: "Early", middle: "Middle", late: "Late" };
+
+function timeOf(slotKey) {
+  // slotKey = "Mon 22:15"
+  const t = slotKey.split(" ")[1];
+  return t;  // "HH:MM" string-comparable
+}
+
+function bucketOf(slotKey, earlyEnd, lateStart) {
+  const t = timeOf(slotKey);
+  if (t < earlyEnd) return "early";
+  if (t >= lateStart) return "late";
+  return "middle";
+}
+
+function analyze(games, includePlayoffs, opts = {}) {
+  const useBuckets = opts.slotView === "buckets";
+  const earlyEnd = opts.earlyEnd || "21:00";
+  const lateStart = opts.lateStart || "22:30";
+
+  const fair = includePlayoffs ? games : games.filter(g => !g.isPlayoff);
+  const teams = uniqueTeams(games);
+
+  const slotKeyOf = useBuckets
+    ? (g) => bucketOf(g.slotKey, earlyEnd, lateStart)
+    : (g) => g.slotKey;
+
+  const slots = useBuckets
+    ? BUCKET_ORDER.filter(b => games.some(g => bucketOf(g.slotKey, earlyEnd, lateStart) === b))
+    : [...new Set(games.map(g => g.slotKey))].sort(slotCmp);
+
+  const gameCount = Object.fromEntries(teams.map(t => [t, 0]));
+  for (const g of fair) { gameCount[g.home]++; gameCount[g.away]++; }
+  const counts = Object.values(gameCount);
+  const median = counts.length ? counts.slice().sort((a,b)=>a-b)[Math.floor(counts.length/2)] : 0;
+  const gameCountPenalty = counts.reduce((s, c) => s + (c - median) ** 2, 0);
+
+  const ha = Object.fromEntries(teams.map(t => [t, { h: 0, a: 0 }]));
+  for (const g of fair) { if (ha[g.home]) ha[g.home].h++; if (ha[g.away]) ha[g.away].a++; }
+  const homeAwayPenalty = teams.reduce((s, t) => s + (ha[t].h - ha[t].a) ** 2, 0);
+
+  const slotMatrix = {};
+  for (const t of teams) slotMatrix[t] = Object.fromEntries(slots.map(s => [s, 0]));
+  for (const g of fair) {
+    const sk = slotKeyOf(g);
+    if (slotMatrix[g.home] && sk in slotMatrix[g.home]) slotMatrix[g.home][sk]++;
+    if (slotMatrix[g.away] && sk in slotMatrix[g.away]) slotMatrix[g.away][sk]++;
+  }
+  let slotPenalty = 0;
+  const slotExpectedPerTeam = {};
+  for (const t of teams) {
+    const total = slots.reduce((s, sk) => s + slotMatrix[t][sk], 0);
+    const expected = slots.length ? total / slots.length : 0;
+    slotExpectedPerTeam[t] = expected;
+    for (const sk of slots) {
+      slotPenalty += (slotMatrix[t][sk] - expected) ** 2;
+    }
+  }
+
+  const b2b = [];
+  for (const t of teams) {
+    const myGames = games.filter(g => g.home === t || g.away === t).sort((a,b)=>a.date - b.date);
+    for (let i = 0; i < myGames.length - 1; i++) {
+      const oppA = myGames[i].home === t ? myGames[i].away : myGames[i].home;
+      const oppB = myGames[i+1].home === t ? myGames[i+1].away : myGames[i+1].home;
+      if (oppA === oppB) {
+        b2b.push({ team: t, opponent: oppA, gameA: myGames[i], gameB: myGames[i+1] });
+      }
+    }
+  }
+  const seen = new Set();
+  const b2bUnique = [];
+  for (const x of b2b) {
+    const key = [x.gameA.id, x.gameB.id].sort().join("|");
+    if (!seen.has(key)) { seen.add(key); b2bUnique.push(x); }
+  }
+  const b2bPenalty = b2bUnique.length;
+
+  const total =
+    W_GAMECOUNT * gameCountPenalty +
+    W_HOMEAWAY * homeAwayPenalty +
+    W_SLOT * slotPenalty +
+    W_B2B * b2bPenalty;
+
+  return {
+    teams, slots, gameCount, median,
+    homeAway: ha,
+    slotMatrix, slotExpectedPerTeam,
+    b2b: b2bUnique,
+    breakdown: {
+      gameCount: W_GAMECOUNT * gameCountPenalty,
+      homeAway: W_HOMEAWAY * homeAwayPenalty,
+      slot: W_SLOT * slotPenalty,
+      b2b: W_B2B * b2bPenalty,
+    },
+    total,
+  };
+}
+
+function uniqueTeams(games) {
+  const set = new Set();
+  for (const g of games) { set.add(g.home); set.add(g.away); }
+  return [...set].filter(Boolean).sort();
+}
+
+function slotCmp(a, b) {
+  const order = { Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6 };
+  const [da, ta] = a.split(" ");
+  const [db, tb] = b.split(" ");
+  return (order[da] - order[db]) || ta.localeCompare(tb);
+}
+
+// ---------- Swap engine ----------
+
+function suggestSwaps(games, includePlayoffs, opts, max=10) {
+  const baseAnalysis = analyze(games, includePlayoffs, opts);
+  const baseTotal = baseAnalysis.total;
+  const suggestions = [];
+  for (let i = 0; i < games.length; i++) {
+    for (let j = i + 1; j < games.length; j++) {
+      if (games[i].date.getTime() === games[j].date.getTime()) continue;
+      const swapped = swapDates(games, i, j);
+      if (hasTeamConflict(swapped)) continue;
+      const aft = analyze(swapped, includePlayoffs, opts);
+      const delta = baseTotal - aft.total;
+      if (delta > 1e-6) {
+        suggestions.push({
+          i, j, delta,
+          before: baseAnalysis.breakdown,
+          after: aft.breakdown,
+        });
+      }
+    }
+  }
+  suggestions.sort((a, b) => b.delta - a.delta);
+  return suggestions.slice(0, max);
+}
+
+function swapDates(games, i, j) {
+  const out = games.map(g => ({ ...g }));
+  const tmpDate = out[i].date, tmpLoc = out[i].location, tmpSlot = out[i].slotKey;
+  out[i].date = out[j].date; out[i].location = out[j].location; out[i].slotKey = out[j].slotKey;
+  out[j].date = tmpDate; out[j].location = tmpLoc; out[j].slotKey = tmpSlot;
+  return out;
+}
+
+function hasTeamConflict(games) {
+  const byTime = {};
+  for (const g of games) {
+    const t = g.date.getTime();
+    if (!byTime[t]) byTime[t] = [];
+    byTime[t].push(g);
+  }
+  for (const t of Object.keys(byTime)) {
+    const teams = [];
+    for (const g of byTime[t]) { teams.push(g.home, g.away); }
+    if (new Set(teams).size !== teams.length) return true;
+  }
+  return false;
+}
+
+// ---------- UI ----------
+
+const $ = id => document.getElementById(id);
+
+function setStatus(msg, kind="") {
+  const el = $("status");
+  if (!msg) { clear(el); return; }
+  mount(el, h("div", { class: `banner ${kind}` }, msg));
+}
+
+function fmtDate(d) {
+  return d.toLocaleString(undefined, { month: "numeric", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function render() {
+  if (!state.games.length) {
+    $("dashboard").style.display = "none";
+    $("loaded-summary").textContent = "";
+    return;
+  }
+  $("dashboard").style.display = "";
+  const teams = uniqueTeams(state.games);
+  const summary = state.league?.name
+    ? `${state.league.name} • ${state.games.length} games • ${teams.length} teams`
+    : `${state.games.length} games • ${teams.length} teams`;
+  const swapped = state.swapsApplied.length ? ` • ${state.swapsApplied.length} swap${state.swapsApplied.length===1?"":"s"} applied` : "";
+  $("loaded-summary").textContent = summary + swapped;
+
+  const opts = { slotView: state.slotView, earlyEnd: state.earlyEnd, lateStart: state.lateStart };
+  const analysis = analyze(state.games, state.includePlayoffs, opts);
+  $("penalty-summary").textContent =
+    `Penalty: ${analysis.total.toFixed(1)}   ` +
+    `(games ${analysis.breakdown.gameCount.toFixed(1)} · h/a ${analysis.breakdown.homeAway.toFixed(1)} · slots ${analysis.breakdown.slot.toFixed(1)} · b2b ${analysis.breakdown.b2b.toFixed(1)})`;
+
+  renderSchedule();
+  renderCalendar();
+  renderGamesPerTeam(analysis);
+  renderHomeAway(analysis);
+  renderHeatmap(analysis);
+  renderB2B(analysis);
+  renderSwaps(analysis);
+}
+
+function renderSchedule() {
+  const tb = $("schedule-table").querySelector("tbody");
+  const sk = state.sortKey, asc = state.sortAsc;
+  const rows = state.games.map((g, idx) => ({
+    g, idx, date: g.date.getTime(),
+    slotKey: g.slotKey, home: g.home, away: g.away,
+    kind: g.isPlayoff ? "playoff" : "regular",
+  }));
+  rows.sort((a, b) => {
+    const av = a[sk], bv = b[sk];
+    if (av < bv) return asc ? -1 : 1;
+    if (av > bv) return asc ? 1 : -1;
+    return a.idx - b.idx;
+  });
+  mount(tb, rows.map(r => h("tr", null,
+    h("td", { class: "num" }, r.idx + 1),
+    h("td", null, fmtDate(r.g.date)),
+    h("td", null, r.g.slotKey),
+    h("td", null, r.g.home),
+    h("td", null, r.g.away),
+    h("td", null, h("span", { class: `pill ${r.kind}` }, r.kind)),
+  )));
+}
+
+function renderCalendar() {
+  // Legend
+  const legendItems = uniqueTeams(state.games).map(t => {
+    const s = styleOf(t);
+    return h("div", { class: "legend-item" },
+      h("div", { class: "legend-swatch", style: { background: s.bg } }),
+      h("span", null, t),
+    );
+  });
+  mount($("cal-legend"), legendItems);
+
+  // Group games by month
+  const byMonth = new Map();  // "YYYY-MM" -> [games]
+  for (const g of state.games) {
+    const key = `${g.date.getFullYear()}-${pad2(g.date.getMonth()+1)}`;
+    if (!byMonth.has(key)) byMonth.set(key, []);
+    byMonth.get(key).push(g);
+  }
+  const monthKeys = [...byMonth.keys()].sort();
+
+  const months = monthKeys.map(mk => {
+    const [yr, mo] = mk.split("-").map(Number);
+    const firstDay = new Date(yr, mo - 1, 1);
+    const daysInMonth = new Date(yr, mo, 0).getDate();
+    const leadingBlanks = firstDay.getDay(); // 0..6 (Sun..Sat)
+    const monthGames = byMonth.get(mk);
+    const gamesByDay = new Map();
+    for (const g of monthGames) {
+      const d = g.date.getDate();
+      if (!gamesByDay.has(d)) gamesByDay.set(d, []);
+      gamesByDay.get(d).push(g);
+    }
+
+    const dowHeader = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
+      .map(n => h("div", { class: "cal-dow" }, n));
+
+    const cells = [];
+    for (let i = 0; i < leadingBlanks; i++) {
+      cells.push(h("div", { class: "cal-day cal-empty" }));
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dayGames = (gamesByDay.get(d) || []).sort((a,b) => a.date - b.date);
+      const cellChildren = [h("div", { class: "cal-date" }, d)];
+      for (const g of dayGames) {
+        const sh = styleOf(g.home), sa = styleOf(g.away);
+        const time = `${((g.date.getHours() + 11) % 12 + 1)}:${pad2(g.date.getMinutes())}${g.date.getHours() >= 12 ? "p" : "a"}`;
+        cellChildren.push(h("div", { class: "cal-game", title: `${g.home} (home) vs ${g.away} (away) — ${fmtDate(g.date)}` },
+          h("div", { class: "time" }, time),
+          h("div", { class: "half", style: { background: sh.bg, color: sh.fg } }, sh.abbr),
+          h("div", { class: "half", style: { background: sa.bg, color: sa.fg } }, sa.abbr),
+        ));
+      }
+      cells.push(h("div", { class: `cal-day${dayGames.length ? " has-game" : ""}` }, ...cellChildren));
+    }
+
+    const monthName = firstDay.toLocaleString(undefined, { month: "long", year: "numeric" });
+    return h("div", { class: "cal-month" },
+      h("h3", null, monthName),
+      h("div", { class: "cal-grid" }, ...dowHeader, ...cells),
+    );
+  });
+
+  mount($("calendar"), months);
+}
+
+function renderGamesPerTeam(a) {
+  const max = Math.max(...Object.values(a.gameCount), 1);
+  const rows = a.teams.map(t => {
+    const c = a.gameCount[t];
+    const cls = c === a.median ? "good" : Math.abs(c - a.median) > 1 ? "bad" : "warn";
+    return h("div", { class: "bar-row" },
+      h("div", null, t),
+      h("div", null, h("div", { class: `bar ${cls}`, style: { width: `${(c / max) * 100}%` } })),
+      h("div", { class: "num" }, c),
+    );
+  });
+  mount($("games-per-team"), rows);
+
+  const note = $("gpt-note");
+  if (a.breakdown.gameCount > 0) {
+    mount(note,
+      h("span", { class: "err" }, "Imbalance detected. "),
+      `Median is ${a.median}. `,
+      h("em", null, "A date-swap can't fix this — the matchup list itself is uneven."),
+    );
+  } else {
+    mount(note, `All teams play ${a.median} games. ✓`);
+  }
+}
+
+function renderHomeAway(a) {
+  const rows = a.teams.map(t => {
+    const { h: hc, a: ac } = a.homeAway[t];
+    return h("div", { class: "ha-row" },
+      h("div", null, t),
+      h("div", { class: "ha-track" },
+        h("div", { class: "h", style: { flex: String(hc) } }),
+        h("div", { class: "a", style: { flex: String(ac) } }),
+      ),
+      h("div", { class: "num" }, `${hc} / ${ac}`),
+    );
+  });
+  mount($("home-away"), rows);
+}
+
+function renderHeatmap(a) {
+  const slots = a.slots;
+  const isBucket = state.slotView === "buckets";
+  const label = (s) => isBucket ? BUCKET_LABEL[s] || s : s;
+  const thead = h("thead", null, h("tr", null,
+    h("th"),
+    slots.map(s => h("th", null, label(s))),
+    h("th", null, "Σ"),
+  ));
+  const tbody = h("tbody", null, a.teams.map(t => {
+    let row = 0;
+    const cells = slots.map(sk => {
+      const c = a.slotMatrix[t][sk];
+      row += c;
+      const exp = a.slotExpectedPerTeam[t];
+      const dev = c - exp;
+      const intensity = Math.min(1, Math.abs(dev) / Math.max(1, exp));
+      const bg = dev > 0
+        ? `hsla(0, 70%, 50%, ${intensity * 0.6})`
+        : dev < 0
+        ? `hsla(210, 70%, 50%, ${intensity * 0.4})`
+        : "transparent";
+      return h("td", { class: "cell", style: { background: bg } }, c);
+    });
+    return h("tr", null,
+      h("td", { class: "team" }, t),
+      cells,
+      h("td", { class: "cell num" }, row),
+    );
+  }));
+  mount($("heatmap"), thead, tbody);
+}
+
+function renderB2B(a) {
+  const ul = $("b2b-list");
+  if (a.b2b.length === 0) {
+    mount(ul, h("li", { class: "muted" }, "No same-matchup back-to-backs detected. ✓"));
+    return;
+  }
+  mount(ul, a.b2b.map(x => h("li", null,
+    h("strong", null, x.team), " plays ",
+    h("strong", null, x.opponent), " twice in a row: ",
+    h("span", { class: "tag" }, fmtDate(x.gameA.date)),
+    " → ",
+    h("span", { class: "tag" }, fmtDate(x.gameB.date)),
+  )));
+}
+
+function renderSwaps(analysis) {
+  const list = $("swap-list");
+  mount(list, h("div", { class: "muted" }, "Computing…"));
+  requestAnimationFrame(() => {
+    const opts = { slotView: state.slotView, earlyEnd: state.earlyEnd, lateStart: state.lateStart };
+    const sugg = suggestSwaps(state.games, state.includePlayoffs, opts, 10);
+    if (sugg.length === 0) {
+      mount(list, h("div", { class: "muted" },
+        analysis.total === 0
+          ? "Schedule is already balanced."
+          : "No improving single swaps found. Remaining penalty may need a matchup change."));
+      return;
+    }
+    const cards = sugg.map((s, n) => {
+      const ga = state.games[s.i], gb = state.games[s.j];
+      const detail =
+        `games ${s.before.gameCount.toFixed(1)}→${s.after.gameCount.toFixed(1)} · ` +
+        `h/a ${s.before.homeAway.toFixed(1)}→${s.after.homeAway.toFixed(1)} · ` +
+        `slots ${s.before.slot.toFixed(1)}→${s.after.slot.toFixed(1)} · ` +
+        `b2b ${s.before.b2b.toFixed(1)}→${s.after.b2b.toFixed(1)}`;
+      return h("div", { class: "swap-card" },
+        h("div", { class: "games" },
+          h("div", null, h("strong", null, `${n+1}. `), "Swap dates of:"),
+          h("div", null, "  ", h("span", { class: "tag" }, `G${s.i+1}`), " ",
+            `${ga.home} vs ${ga.away} — ${fmtDate(ga.date)}`),
+          h("div", null, "  ", h("span", { class: "tag" }, `G${s.j+1}`), " ",
+            `${gb.home} vs ${gb.away} — ${fmtDate(gb.date)}`),
+          h("div", { class: "breakdown" }, detail),
+        ),
+        h("div", { style: { textAlign: "right" } },
+          h("div", { class: "delta" }, `−${s.delta.toFixed(2)}`),
+          h("button", {
+            class: "primary",
+            style: { marginTop: "6px" },
+            onclick: () => applySwap(s.i, s.j),
+          }, "Apply"),
+        ),
+      );
+    });
+    mount(list, cards);
+  });
+}
+
+function applySwap(i, j) {
+  state.games = swapDates(state.games, i, j);
+  state.swapsApplied.push({ aId: state.games[i].id, bId: state.games[j].id });
+  save();
+  setStatus(`Applied swap G${i+1} ↔ G${j+1}.`);
+  render();
+}
+
+// ---------- Wiring ----------
+
+$("load-btn").addEventListener("click", async () => {
+  const ref = parseInputRef($("url-input").value);
+  if (!ref) {
+    setStatus("Couldn't recognize the URL. Try the full DaySmart league URL or 'company/leagueId'.", "error");
+    return;
+  }
+  setStatus("Loading from DaySmart…");
+  try {
+    const { league, teams, games } = await fetchLeague(ref.company, ref.leagueId);
+    if (games.length === 0) throw new Error("No games returned");
+    state.source = { mode: "api", company: ref.company, leagueId: ref.leagueId, fetchedAt: Date.now() };
+    state.league = league;
+    state.teams = teams;
+    state.games = games;
+    state.originalGames = games.map(g => ({ ...g }));
+    state.swapsApplied = [];
+    save();
+    setStatus(`Loaded ${games.length} games from ${league.name}.`);
+    render();
+  } catch (e) {
+    console.error(e);
+    setStatus(`Load failed: ${e.message}. If the league is public this may be a CORS/network issue — try Paste mode.`, "error");
+  }
+});
+
+$("paste-toggle").addEventListener("click", () => {
+  const a = $("paste-area");
+  a.style.display = a.style.display === "none" ? "" : "none";
+});
+
+$("paste-parse-btn").addEventListener("click", () => {
+  const txt = $("paste-input").value;
+  const games = parsePastedText(txt);
+  if (games.length === 0) {
+    setStatus("Couldn't parse any games. Each game should be 3 lines: home/away (tab-separated), location, then date/time.", "error");
+    return;
+  }
+  state.source = { mode: "paste", company: null, leagueId: null, fetchedAt: Date.now() };
+  state.league = { name: "Pasted schedule", startDate: null, endDate: null };
+  state.teams = uniqueTeams(games).map(n => ({ id: n, name: n }));
+  state.games = games;
+  state.originalGames = games.map(g => ({ ...g }));
+  state.swapsApplied = [];
+  save();
+  setStatus(`Parsed ${games.length} games.`);
+  render();
+});
+
+$("reset-btn").addEventListener("click", () => {
+  if (!state.originalGames.length) return;
+  state.games = state.originalGames.map(g => ({ ...g }));
+  state.swapsApplied = [];
+  save();
+  setStatus("Reset to original schedule.");
+  render();
+});
+
+$("clear-btn").addEventListener("click", () => {
+  if (!confirm("Clear locally-cached schedule and applied swaps?")) return;
+  localStorage.removeItem(STORAGE_KEY);
+  state = {
+    source: null, league: null, teams: [], games: [], originalGames: [], swapsApplied: [],
+    includePlayoffs: false, sortKey: "date", sortAsc: true,
+  };
+  $("url-input").value = "";
+  $("paste-input").value = "";
+  setStatus("");
+  render();
+});
+
+$("include-playoffs").addEventListener("change", (e) => {
+  state.includePlayoffs = e.target.checked;
+  save();
+  render();
+});
+
+$("playoff-cutoff").addEventListener("change", (e) => {
+  state.playoffCutoff = e.target.value || null;
+  applyPlayoffCutoff(state.games);
+  applyPlayoffCutoff(state.originalGames);
+  save();
+  render();
+});
+
+function syncBucketControlsVisibility() {
+  $("bucket-thresholds").style.display = state.slotView === "buckets" ? "" : "none";
+}
+
+$("slot-view").addEventListener("change", (e) => {
+  state.slotView = e.target.value;
+  syncBucketControlsVisibility();
+  save();
+  render();
+});
+
+$("early-end").addEventListener("change", (e) => {
+  if (e.target.value) { state.earlyEnd = e.target.value; save(); render(); }
+});
+
+$("late-start").addEventListener("change", (e) => {
+  if (e.target.value) { state.lateStart = e.target.value; save(); render(); }
+});
+
+$("schedule-table").querySelectorAll("th").forEach(th => {
+  th.addEventListener("click", () => {
+    const k = th.dataset.sort;
+    if (state.sortKey === k) state.sortAsc = !state.sortAsc;
+    else { state.sortKey = k; state.sortAsc = true; }
+    save();
+    render();
+  });
+});
+
+// ---------- Init ----------
+
+$("slot-view").value = state.slotView;
+$("early-end").value = state.earlyEnd;
+$("late-start").value = state.lateStart;
+syncBucketControlsVisibility();
+
+if (load() && state.games.length) {
+  $("include-playoffs").checked = !!state.includePlayoffs;
+  if (state.playoffCutoff) $("playoff-cutoff").value = state.playoffCutoff;
+  $("slot-view").value = state.slotView;
+  $("early-end").value = state.earlyEnd;
+  $("late-start").value = state.lateStart;
+  syncBucketControlsVisibility();
+  if (state.source?.mode === "api" && state.source.company && state.source.leagueId) {
+    $("url-input").value = `${state.source.company}/${state.source.leagueId}`;
+  }
+  setStatus(`Restored ${state.games.length} games from local cache (${state.source?.mode || "?"} mode).`);
+  render();
+}
+</script>
+</body>
+</html>
