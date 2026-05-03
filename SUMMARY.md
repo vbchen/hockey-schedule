@@ -1,6 +1,14 @@
 # Project changelog
 
 ## 2026-05-03
+- Added a thin Playwright smoke-test layer (`e2e/smoke.spec.js`, 7 tests,
+  ~2s headless Chromium) to catch UI regressions that unit tests can't —
+  mainly "did a panel disappear?" Driven through the paste-import path
+  with a generated fixture so there's no network dependency. Run via
+  `npm run e2e` (separate from `npm test`). Requires a one-time
+  `npx playwright install chromium`.
+
+## 2026-05-03
 - Extracted the remaining testable logic (`formatTime24`, `formatSlotKey`,
   `applyPlayoffCutoff`, `finalizeGames`, `parsePastedText`, `swapCutoffDate`,
   `suggestSwaps`) into `src/logic.js`. Where these functions previously read
