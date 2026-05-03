@@ -1,6 +1,8 @@
 # Project changelog
 
 ## 2026-05-02
+- Added 12h/24h time format toggle. Affects schedule slot column,
+  exact-view heatmap header, and calendar time chip. Default is 12h.
 - Changed default "late game" threshold from 10:30pm to 10:00pm.
 
 ## 2026-05-02

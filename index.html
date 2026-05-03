@@ -184,6 +184,12 @@
             <option value="exact">Exact times</option>
           </select>
         </label>
+        <label class="muted">Time format:
+          <select id="time-format">
+            <option value="12h">12-hour (AM/PM)</option>
+            <option value="24h">24-hour</option>
+          </select>
+        </label>
         <span id="bucket-thresholds">
           <label class="muted">Early before <input type="time" id="early-end" style="padding:4px 6px; width: 110px;"></label>
           <label class="muted">Late at/after <input type="time" id="late-start" style="padding:4px 6px; width: 110px;"></label>
@@ -286,6 +292,7 @@ let state = {
   slotView: "buckets",   // "exact" | "buckets"
   earlyEnd: "21:00",     // games starting before this = early
   lateStart: "22:00",    // games starting at/after this = late
+  timeFormat: "12h",     // "12h" | "24h"
   sortKey: "date",
   sortAsc: true,
 };
@@ -467,6 +474,22 @@ function applyPlayoffCutoff(games) {
 }
 
 function pad2(n) { return String(n).padStart(2, "0"); }
+
+function formatTime24(t) {
+  if (state.timeFormat === "24h") return t;
+  // t = "HH:MM" -> "h:mm AM/PM"
+  const [hh, mm] = t.split(":").map(Number);
+  const ap = hh >= 12 ? "PM" : "AM";
+  const h12 = ((hh + 11) % 12) + 1;
+  return `${h12}:${pad2(mm)} ${ap}`;
+}
+
+function formatSlotKey(slotKey) {
+  // "Mon 22:15" -> "Mon 22:15" or "Mon 10:15 PM"
+  const sp = slotKey.indexOf(" ");
+  if (sp < 0) return slotKey;
+  return slotKey.slice(0, sp) + " " + formatTime24(slotKey.slice(sp + 1));
+}
 
 // ---------- Analyzer ----------
 
@@ -692,7 +715,7 @@ function renderSchedule() {
   mount(tb, rows.map(r => h("tr", null,
     h("td", { class: "num" }, r.idx + 1),
     h("td", null, fmtDate(r.g.date)),
-    h("td", null, r.g.slotKey),
+    h("td", null, formatSlotKey(r.g.slotKey)),
     h("td", null, r.g.home),
     h("td", null, r.g.away),
     h("td", null, h("span", { class: `pill ${r.kind}` }, r.kind)),
@@ -744,7 +767,10 @@ function renderCalendar() {
       const cellChildren = [h("div", { class: "cal-date" }, d)];
       for (const g of dayGames) {
         const sh = styleOf(g.home), sa = styleOf(g.away);
-        const time = `${((g.date.getHours() + 11) % 12 + 1)}:${pad2(g.date.getMinutes())}${g.date.getHours() >= 12 ? "p" : "a"}`;
+        const hh = g.date.getHours(), mm = g.date.getMinutes();
+        const time = state.timeFormat === "24h"
+          ? `${pad2(hh)}:${pad2(mm)}`
+          : `${((hh + 11) % 12 + 1)}:${pad2(mm)}${hh >= 12 ? "p" : "a"}`;
         cellChildren.push(h("div", { class: "cal-game", title: `${g.home} (home) vs ${g.away} (away) — ${fmtDate(g.date)}` },
           h("div", { class: "time" }, time),
           h("div", { class: "half", style: { background: sh.bg, color: sh.fg } }, sh.abbr),
@@ -807,7 +833,7 @@ function renderHomeAway(a) {
 function renderHeatmap(a) {
   const slots = a.slots;
   const isBucket = state.slotView === "buckets";
-  const label = (s) => isBucket ? BUCKET_LABEL[s] || s : s;
+  const label = (s) => isBucket ? BUCKET_LABEL[s] || s : formatSlotKey(s);
   const thead = h("thead", null, h("tr", null,
     h("th"),
     slots.map(s => h("th", null, label(s))),
@@ -1008,6 +1034,12 @@ $("late-start").addEventListener("change", (e) => {
   if (e.target.value) { state.lateStart = e.target.value; save(); render(); }
 });
 
+$("time-format").addEventListener("change", (e) => {
+  state.timeFormat = e.target.value;
+  save();
+  render();
+});
+
 $("schedule-table").querySelectorAll("th").forEach(th => {
   th.addEventListener("click", () => {
     const k = th.dataset.sort;
@@ -1023,6 +1055,7 @@ $("schedule-table").querySelectorAll("th").forEach(th => {
 $("slot-view").value = state.slotView;
 $("early-end").value = state.earlyEnd;
 $("late-start").value = state.lateStart;
+$("time-format").value = state.timeFormat;
 syncBucketControlsVisibility();
 
 if (load() && state.games.length) {
