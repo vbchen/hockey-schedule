@@ -1,6 +1,15 @@
 # Project changelog
 
 ## 2026-05-03
+- Added unit-testing pilot. Extracted pure logic from `index.html` into
+  `src/logic.js` as an ES module (date/slot helpers, serializers,
+  `analyze`, `swapDates`, `hasTeamConflict`, etc.). `index.html`'s
+  `<script>` is now `type="module"` and imports them. Added Vitest with
+  39 tests in `tests/logic.test.js`. Local dev now needs an HTTP
+  server (e.g. `python3 -m http.server`) instead of opening the file
+  via `file://`; GitHub Pages is unaffected.
+
+## 2026-05-03
 - Swap engine: reject any swap that puts a team in two games on the same
   calendar day (was previously only checking same exact timestamp). Added
   W_WEEK ×3 penalty term (squared deviation from 1 game/team/week) to
