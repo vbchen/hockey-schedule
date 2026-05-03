@@ -79,6 +79,18 @@
   .cal-game .time { padding: 2px 4px; background: rgba(255,255,255,0.06); color: var(--text-dim); font-variant-numeric: tabular-nums; width: 48px; flex: 0 0 48px; text-align: center; }
   .cal-game .half { flex: 1; padding: 2px 4px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
   .cal-game .vs { padding: 2px; color: var(--text-dim); font-size: 9px; align-self: center; }
+  .cal-day.cal-holiday-day { background: #2a221a; border-color: #4a3a1f; }
+  .cal-holiday {
+    font-size: 9px; color: var(--warn); padding: 1px 3px; border-radius: 2px;
+    background: rgba(255, 184, 74, 0.12); font-weight: 700;
+    text-transform: uppercase; letter-spacing: .03em;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .holiday-tag {
+    display: inline-block; padding: 1px 6px; border-radius: 3px;
+    background: rgba(255, 184, 74, 0.15); color: var(--warn);
+    font-size: 10.5px; font-weight: 600; margin-left: 8px;
+  }
   .cal-game--swapped {
     outline: 2px dashed var(--good);
     outline-offset: -1px;
@@ -157,6 +169,33 @@
     text-transform: uppercase; letter-spacing: .04em; vertical-align: 1px;
   }
   .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .mode-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  .mode-toggle button { border: 0; border-radius: 0; padding: 6px 12px; font-weight: 600; }
+  .mode-toggle button + button { border-left: 1px solid var(--border); }
+  .mode-toggle button.active { background: var(--accent); color: #001827; }
+  .mode-toggle button:not(.active) { background: var(--panel-2); color: var(--text-dim); }
+  .mode-toggle button:not(.active):hover { color: var(--text); }
+  .plan-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+  .plan-grid h3 { margin: 0 0 8px; }
+  .plan-pat-row, .plan-slot-row {
+    display: grid; gap: 6px; align-items: center; padding: 3px 0;
+  }
+  .plan-pat-row { grid-template-columns: 110px 110px 1fr 130px 32px; }
+  .plan-slot-row { grid-template-columns: 1fr 110px 1fr 32px; }
+  .plan-pat-row select, .plan-pat-row input,
+  .plan-slot-row input {
+    padding: 4px 6px;
+  }
+  .plan-pat-row .x-btn, .plan-slot-row .x-btn {
+    background: transparent; border: 0; color: var(--text-dim); font-size: 16px; padding: 0; cursor: pointer;
+  }
+  .plan-pat-row .x-btn:hover, .plan-slot-row .x-btn:hover { color: var(--bad); }
+  .plan-pat-head, .plan-slot-head {
+    display: grid; gap: 6px; padding: 4px 0; color: var(--text-dim); font-size: 11px;
+    text-transform: uppercase; letter-spacing: .04em; font-weight: 600;
+  }
+  .plan-pat-head { grid-template-columns: 110px 110px 1fr 130px 32px; }
+  .plan-slot-head { grid-template-columns: 1fr 110px 1fr 32px; }
   .footnote { color: var(--text-dim); font-size: 12px; margin-top: 8px; }
   details > summary { cursor: pointer; color: var(--text-dim); padding: 4px 0; }
   details[open] > summary { color: var(--text); }
@@ -173,22 +212,82 @@
     <div class="row">
       <h1>🏒 Hockey Schedule Analyzer</h1>
       <span class="muted" id="loaded-summary"></span>
-    </div>
-    <div class="row" style="margin-top: 12px;">
-      <input id="url-input" type="text" class="grow"
-        placeholder="Paste DaySmart league URL (e.g. apps.daysmartrecreation.com/.../leagues/4356) or 'ocsportsplex/4356'">
-      <button id="load-btn" class="primary">Load</button>
-      <button id="paste-toggle" class="ghost">Paste mode</button>
-      <button id="reset-btn" class="ghost" title="Revert all applied swaps">↺ Reset</button>
-      <button id="clear-btn" class="ghost" title="Wipe local cache">🗑 Clear</button>
-    </div>
-    <div id="paste-area" style="display:none; margin-top: 10px;">
-      <textarea id="paste-input" placeholder="Paste the schedule table copied from the league site..."></textarea>
-      <div class="row" style="margin-top: 8px;">
-        <button id="paste-parse-btn" class="primary">Parse pasted text</button>
-        <span class="muted">Tip: select all rows in the schedule table and copy. Pagination tokens like <span class="kbd">«</span> <span class="kbd">»</span> are filtered automatically.</span>
+      <span class="grow"></span>
+      <div class="mode-toggle" role="tablist">
+        <button id="mode-analyze-btn" class="active" role="tab">Analyze existing</button>
+        <button id="mode-plan-btn" role="tab">Plan new season</button>
       </div>
     </div>
+
+    <div id="analyze-controls">
+      <div class="row" style="margin-top: 12px;">
+        <input id="url-input" type="text" class="grow"
+          placeholder="Paste DaySmart league URL (e.g. apps.daysmartrecreation.com/.../leagues/4356) or 'ocsportsplex/4356'">
+        <button id="load-btn" class="primary">Load</button>
+        <button id="paste-toggle" class="ghost">Paste mode</button>
+        <button id="reset-btn" class="ghost" title="Revert all applied swaps">↺ Reset</button>
+        <button id="clear-btn" class="ghost" title="Wipe local cache">🗑 Clear</button>
+      </div>
+      <div id="paste-area" style="display:none; margin-top: 10px;">
+        <textarea id="paste-input" placeholder="Paste the schedule table copied from the league site..."></textarea>
+        <div class="row" style="margin-top: 8px;">
+          <button id="paste-parse-btn" class="primary">Parse pasted text</button>
+          <span class="muted">Tip: select all rows in the schedule table and copy. Pagination tokens like <span class="kbd">«</span> <span class="kbd">»</span> are filtered automatically.</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="plan-controls" style="display:none;">
+      <div class="plan-grid" style="margin-top: 12px;">
+        <div>
+          <h3>Teams</h3>
+          <textarea id="plan-teams" placeholder="One team per line&#10;Pylons&#10;Tropical Depression&#10;..."></textarea>
+        </div>
+
+        <div>
+          <h3>Season window</h3>
+          <div class="row">
+            <label class="muted">Start: <input type="date" id="plan-start" style="padding: 4px 6px;"></label>
+            <label class="muted">End: <input type="date" id="plan-end" style="padding: 4px 6px;"></label>
+            <label class="muted" title="Excludes playoffs — slots on or after the playoff start date aren't given matchups by the generator.">Regular-season games per team: <input type="number" id="plan-target" min="1" max="60" style="width: 70px; padding: 4px 6px;"></label>
+            <label class="muted">Playoffs start: <input type="date" id="plan-playoff" style="padding: 4px 6px;"></label>
+          </div>
+          <div class="footnote">Playoff slots stay reserved — the generator doesn't assign matchups to them.</div>
+        </div>
+
+        <div>
+          <h3>Recurring slots</h3>
+          <div class="plan-pat-head">
+            <span>Weekday</span><span>Time</span><span>Location</span><span>Frequency</span><span></span>
+          </div>
+          <div id="plan-pat-rows"></div>
+          <button id="plan-add-pat" class="ghost" style="margin-top: 6px;">+ Add slot</button>
+          <div class="footnote">Two same-weekday rows with frequencies "Odd weeks" and "Even weeks" alternate (only one fires per week).</div>
+        </div>
+
+        <div>
+          <div class="row" style="margin-bottom: 6px;">
+            <h3 style="margin: 0;">Slot list</h3>
+            <button id="plan-expand-btn" class="ghost">Expand pattern →</button>
+            <span class="muted" id="plan-slot-count"></span>
+          </div>
+          <div id="plan-slots-empty" class="muted footnote">Set the season window and recurring slots above, then click "Expand pattern" to see the flat list. You can edit times or remove rows for bye weeks before generating.</div>
+          <div id="plan-slots-wrap" style="display:none;">
+            <div class="plan-slot-head">
+              <span>Date</span><span>Time</span><span>Location</span><span></span>
+            </div>
+            <div id="plan-slot-rows" style="max-height: 280px; overflow:auto;"></div>
+          </div>
+        </div>
+
+        <div class="row">
+          <button id="plan-generate-btn" class="primary">Generate schedule</button>
+          <button id="plan-edit-btn" class="ghost" style="display:none;">Edit plan inputs</button>
+          <span class="muted" id="plan-generate-note"></span>
+        </div>
+      </div>
+    </div>
+
     <div id="status" style="margin-top: 10px;"></div>
   </div>
 
@@ -335,6 +434,10 @@ import {
   swapCutoffDate,
   suggestSwaps,
   parseInputRef,
+  expandSlotPattern,
+  generateSchedule,
+  holidayMap,
+  holidayWeekMap,
 } from "./src/logic.js";
 
 // ---------- Constants ----------
@@ -385,6 +488,7 @@ function mount(el, ...nodes) { clear(el); for (const n of nodes.flat(Infinity)) 
 // ---------- State ----------
 
 let state = {
+  mode: "analyze",       // "analyze" | "plan"
   source: null,
   league: null,
   teams: [],
@@ -399,7 +503,24 @@ let state = {
   timeFormat: "12h",     // "12h" | "24h"
   sortKey: "date",
   sortAsc: true,
+  planConfig: null,      // { teamsText, startDate, endDate, patterns, expandedSlots, targetGames, playoffCutoff }
 };
+
+function serializePlanConfig(pc) {
+  if (!pc) return null;
+  return {
+    ...pc,
+    expandedSlots: (pc.expandedSlots || []).map(s => ({ ...s, date: s.date instanceof Date ? s.date.toISOString() : s.date })),
+  };
+}
+
+function deserializePlanConfig(pc) {
+  if (!pc) return null;
+  return {
+    ...pc,
+    expandedSlots: (pc.expandedSlots || []).map(s => ({ ...s, date: new Date(s.date) })),
+  };
+}
 
 function save() {
   const payload = {
@@ -407,6 +528,7 @@ function save() {
     games: state.games.map(serializeGame),
     originalGames: state.originalGames.map(serializeGame),
     swapsApplied: (state.swapsApplied || []).map(serializeApplied),
+    planConfig: serializePlanConfig(state.planConfig),
   };
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch (e) {}
 }
@@ -422,6 +544,7 @@ function load() {
       games: (p.games || []).map(deserializeGame),
       originalGames: (p.originalGames || []).map(deserializeGame),
       swapsApplied: (p.swapsApplied || []).map(deserializeApplied),
+      planConfig: deserializePlanConfig(p.planConfig),
     };
     return true;
   } catch (e) { return false; }
@@ -593,6 +716,13 @@ function renderCalendar() {
   }
   const monthKeys = [...byMonth.keys()].sort();
 
+  // Holiday lookup spans every rendered month, so a holiday in an empty month
+  // (e.g., December if no games are scheduled then) still shows.
+  const hMap = monthKeys.length ? holidayMap(
+    new Date(+monthKeys[0].split("-")[0], +monthKeys[0].split("-")[1] - 1, 1),
+    new Date(+monthKeys[monthKeys.length - 1].split("-")[0], +monthKeys[monthKeys.length - 1].split("-")[1], 0),
+  ) : new Map();
+
   const months = monthKeys.map(mk => {
     const [yr, mo] = mk.split("-").map(Number);
     const firstDay = new Date(yr, mo - 1, 1);
@@ -615,7 +745,10 @@ function renderCalendar() {
     }
     for (let d = 1; d <= daysInMonth; d++) {
       const dayGames = (gamesByDay.get(d) || []).sort((a,b) => a.date - b.date);
+      const dayDate = new Date(yr, mo - 1, d);
+      const holidayName = hMap.get(dayDate.toDateString());
       const cellChildren = [h("div", { class: "cal-date" }, d)];
+      if (holidayName) cellChildren.push(h("div", { class: "cal-holiday", title: holidayName }, holidayName));
       for (const g of dayGames) {
         const sh = styleOf(g.home), sa = styleOf(g.away);
         const hh = g.date.getHours(), mm = g.date.getMinutes();
@@ -636,7 +769,10 @@ function renderCalendar() {
           h("div", { class: "half", style: { background: sa.bg, color: sa.fg } }, sa.abbr),
         ));
       }
-      cells.push(h("div", { class: `cal-day${dayGames.length ? " has-game" : ""}` }, ...cellChildren));
+      const cellClasses = ["cal-day"];
+      if (dayGames.length) cellClasses.push("has-game");
+      if (holidayName) cellClasses.push("cal-holiday-day");
+      cells.push(h("div", { class: cellClasses.join(" ") }, ...cellChildren));
     }
 
     const monthName = firstDay.toLocaleString(undefined, { month: "long", year: "numeric" });
@@ -1017,6 +1153,222 @@ function undoSwap(aId, bId) {
   render();
 }
 
+// ---------- Planner ----------
+
+const WEEKDAY_OPTS = [
+  { v: 0, l: "Sun" }, { v: 1, l: "Mon" }, { v: 2, l: "Tue" }, { v: 3, l: "Wed" },
+  { v: 4, l: "Thu" }, { v: 5, l: "Fri" }, { v: 6, l: "Sat" },
+];
+
+function defaultPlanConfig() {
+  return {
+    teamsText: "",
+    startDate: "",
+    endDate: "",
+    targetGames: 14,
+    playoffCutoff: "",
+    patterns: [{ weekday: 1, time: "21:00", location: "Rink A", frequency: "every" }],
+    expandedSlots: null,
+  };
+}
+
+function ensurePlanConfig() {
+  if (!state.planConfig) state.planConfig = defaultPlanConfig();
+  return state.planConfig;
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  $("mode-analyze-btn").classList.toggle("active", mode === "analyze");
+  $("mode-plan-btn").classList.toggle("active", mode === "plan");
+  $("analyze-controls").style.display = mode === "analyze" ? "" : "none";
+  $("plan-controls").style.display = mode === "plan" ? "" : "none";
+  if (mode === "plan") {
+    ensurePlanConfig();
+    renderPlannerInputs();
+  }
+  save();
+}
+
+function renderPlannerInputs() {
+  const pc = ensurePlanConfig();
+  $("plan-teams").value = pc.teamsText || "";
+  $("plan-start").value = pc.startDate || "";
+  $("plan-end").value = pc.endDate || "";
+  $("plan-target").value = pc.targetGames || 14;
+  $("plan-playoff").value = pc.playoffCutoff || "";
+  renderPatternRows();
+  renderSlotRows();
+  // Toggle the "Edit plan inputs" button when we already have generated games.
+  const haveGenerated = state.source?.mode === "plan" && state.games.length > 0;
+  $("plan-edit-btn").style.display = haveGenerated ? "" : "none";
+}
+
+function renderPatternRows() {
+  const pc = ensurePlanConfig();
+  const wrap = $("plan-pat-rows");
+  clear(wrap);
+  pc.patterns.forEach((p, idx) => {
+    const sel = h("select", {
+      onchange: (e) => { p.weekday = +e.target.value; save(); },
+    }, WEEKDAY_OPTS.map(o => h("option", { value: o.v, selected: p.weekday === o.v ? "" : null }, o.l)));
+    const time = h("input", {
+      type: "time", value: p.time,
+      onchange: (e) => { p.time = e.target.value; save(); },
+    });
+    const loc = h("input", {
+      type: "text", value: p.location,
+      onchange: (e) => { p.location = e.target.value; save(); },
+    });
+    const freq = h("select", {
+      onchange: (e) => { p.frequency = e.target.value; save(); },
+    },
+      h("option", { value: "every", selected: p.frequency === "every" ? "" : null }, "Every week"),
+      h("option", { value: "odd", selected: p.frequency === "odd" ? "" : null }, "Odd weeks"),
+      h("option", { value: "even", selected: p.frequency === "even" ? "" : null }, "Even weeks"),
+    );
+    const rm = h("button", {
+      class: "x-btn", title: "Remove",
+      onclick: () => { pc.patterns.splice(idx, 1); save(); renderPatternRows(); },
+    }, "✕");
+    wrap.append(h("div", { class: "plan-pat-row" }, sel, time, loc, freq, rm));
+  });
+}
+
+function renderSlotRows() {
+  const pc = ensurePlanConfig();
+  const wrap = $("plan-slot-rows");
+  const empty = $("plan-slots-empty");
+  const wrapBox = $("plan-slots-wrap");
+  // Preserve scroll position across re-renders (e.g. after deleting one row).
+  const prevScroll = wrap.scrollTop;
+  if (!pc.expandedSlots || pc.expandedSlots.length === 0) {
+    empty.style.display = "";
+    wrapBox.style.display = "none";
+    $("plan-slot-count").textContent = "";
+    return;
+  }
+  empty.style.display = "none";
+  wrapBox.style.display = "";
+  clear(wrap);
+  // Compute holiday + holiday-week maps over the slot range so each row can
+  // flag itself ("Thanksgiving" on the day, "Thanksgiving week" on adjacent days).
+  const slotMin = pc.expandedSlots[0].date;
+  const slotMax = pc.expandedSlots[pc.expandedSlots.length - 1].date;
+  const dayMap = holidayMap(slotMin, slotMax);
+  const wkMap = holidayWeekMap(slotMin, slotMax);
+  const cutoffMs = pc.playoffCutoff ? new Date(pc.playoffCutoff + "T00:00:00").getTime() : Infinity;
+  const regCount = pc.expandedSlots.filter(s => s.date.getTime() < cutoffMs).length;
+  const playoffCount = pc.expandedSlots.length - regCount;
+  $("plan-slot-count").textContent = playoffCount > 0
+    ? `${pc.expandedSlots.length} slots (${regCount} regular + ${playoffCount} playoff)`
+    : `${pc.expandedSlots.length} slots`;
+  pc.expandedSlots.forEach((s, idx) => {
+    const dateStr = `${WEEKDAY[s.date.getDay()]} ${s.date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}`;
+    const sameDayHoliday = dayMap.get(s.date.toDateString());
+    const wkHolidays = wkMap.get(weekKey(s.date));
+    let holidayLabel = null;
+    if (sameDayHoliday) holidayLabel = sameDayHoliday;
+    else if (wkHolidays) holidayLabel = `${wkHolidays[0]} week`;
+    const dateEl = h("div", null,
+      dateStr,
+      holidayLabel ? h("span", { class: "holiday-tag", title: holidayLabel }, holidayLabel) : null,
+    );
+    const timeStr = `${pad2(s.date.getHours())}:${pad2(s.date.getMinutes())}`;
+    const time = h("input", {
+      type: "time", value: timeStr,
+      onchange: (e) => {
+        const [hh, mm] = e.target.value.split(":").map(Number);
+        if (!isFinite(hh) || !isFinite(mm)) return;
+        s.date = new Date(s.date.getFullYear(), s.date.getMonth(), s.date.getDate(), hh, mm);
+        save();
+      },
+    });
+    const loc = h("input", {
+      type: "text", value: s.location || "",
+      onchange: (e) => { s.location = e.target.value; save(); },
+    });
+    const rm = h("button", {
+      class: "x-btn", title: "Remove (bye week)",
+      onclick: () => { pc.expandedSlots.splice(idx, 1); save(); renderSlotRows(); },
+    }, "✕");
+    wrap.append(h("div", { class: "plan-slot-row" }, dateEl, time, loc, rm));
+  });
+  wrap.scrollTop = prevScroll;
+}
+
+function onExpandPattern() {
+  const pc = ensurePlanConfig();
+  if (!pc.startDate || !pc.endDate) {
+    setStatus("Set season start and end dates before expanding.", "error");
+    return;
+  }
+  const start = new Date(pc.startDate + "T00:00:00");
+  const end = new Date(pc.endDate + "T00:00:00");
+  if (isNaN(start) || isNaN(end) || end < start) {
+    setStatus("Season end must be on or after season start.", "error");
+    return;
+  }
+  if (!pc.patterns.length) {
+    setStatus("Add at least one recurring slot before expanding.", "error");
+    return;
+  }
+  pc.expandedSlots = expandSlotPattern(pc.patterns, start, end);
+  setStatus(`Expanded to ${pc.expandedSlots.length} slots.`);
+  save();
+  renderSlotRows();
+}
+
+function onGenerate() {
+  const pc = ensurePlanConfig();
+  const teams = (pc.teamsText || "").split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  if (teams.length < 2) {
+    setStatus("Enter at least 2 teams (one per line).", "error");
+    return;
+  }
+  if (!pc.expandedSlots || pc.expandedSlots.length === 0) {
+    setStatus("Click \"Expand pattern\" first to build the slot list.", "error");
+    return;
+  }
+  const target = +pc.targetGames || 0;
+  if (target < 1) {
+    setStatus("Set a positive games-per-team target.", "error");
+    return;
+  }
+  const cutoffMs = pc.playoffCutoff ? new Date(pc.playoffCutoff + "T00:00:00").getTime() : Infinity;
+  const regularCount = pc.expandedSlots.filter(s => s.date.getTime() < cutoffMs).length;
+  const maxPossible = Math.floor((regularCount * 2) / teams.length);
+  if (target > maxPossible) {
+    const cutoffNote = pc.playoffCutoff ? ` (before playoffs start)` : ``;
+    setStatus(`${target} games × ${teams.length} teams needs ${Math.ceil(target * teams.length / 2)} regular-season slots${cutoffNote}, but only ${regularCount} are available. Lower the target, add more slots, or push the playoff start date later.`, "warn");
+    return;
+  }
+  const games = generateSchedule(teams, pc.expandedSlots, target, {
+    playoffCutoff: pc.playoffCutoff || null,
+    slotView: state.slotView,
+    earlyEnd: state.earlyEnd,
+    lateStart: state.lateStart,
+    polish: true,
+    polishMaxIters: 10,
+  });
+  if (games.length === 0) {
+    setStatus("Generation produced no games — check your inputs.", "error");
+    return;
+  }
+  state.source = { mode: "plan", company: null, leagueId: null, fetchedAt: Date.now() };
+  state.league = { name: "Planned season", startDate: pc.startDate || null, endDate: pc.endDate || null };
+  state.teams = teams.map(n => ({ id: n, name: n }));
+  state.games = games;
+  state.originalGames = games.map(g => ({ ...g }));
+  state.swapsApplied = [];
+  state.playoffCutoff = pc.playoffCutoff || null;
+  if (pc.playoffCutoff) $("playoff-cutoff").value = pc.playoffCutoff;
+  save();
+  setStatus(`Generated ${games.length} games for ${teams.length} teams.`);
+  $("plan-edit-btn").style.display = "";
+  render();
+}
+
 // ---------- Wiring ----------
 
 $("load-btn").addEventListener("click", async () => {
@@ -1080,11 +1432,15 @@ $("clear-btn").addEventListener("click", () => {
   if (!confirm("Clear locally-cached schedule and applied swaps?")) return;
   localStorage.removeItem(STORAGE_KEY);
   state = {
+    mode: "analyze",
     source: null, league: null, teams: [], games: [], originalGames: [], swapsApplied: [],
     includePlayoffs: false, sortKey: "date", sortAsc: true,
+    slotView: "buckets", earlyEnd: "21:00", lateStart: "22:00", timeFormat: "12h",
+    playoffCutoff: null, planConfig: null,
   };
   $("url-input").value = "";
   $("paste-input").value = "";
+  setMode("analyze");
   setStatus("");
   render();
 });
@@ -1128,6 +1484,30 @@ $("time-format").addEventListener("change", (e) => {
   render();
 });
 
+$("mode-analyze-btn").addEventListener("click", () => setMode("analyze"));
+$("mode-plan-btn").addEventListener("click", () => setMode("plan"));
+
+$("plan-teams").addEventListener("input", (e) => { ensurePlanConfig().teamsText = e.target.value; save(); });
+$("plan-start").addEventListener("change", (e) => { ensurePlanConfig().startDate = e.target.value; save(); });
+$("plan-end").addEventListener("change", (e) => { ensurePlanConfig().endDate = e.target.value; save(); });
+$("plan-target").addEventListener("change", (e) => { ensurePlanConfig().targetGames = +e.target.value || 0; save(); });
+$("plan-playoff").addEventListener("change", (e) => {
+  ensurePlanConfig().playoffCutoff = e.target.value || "";
+  save();
+  renderSlotRows();
+});
+$("plan-add-pat").addEventListener("click", () => {
+  ensurePlanConfig().patterns.push({ weekday: 1, time: "21:00", location: "", frequency: "every" });
+  save();
+  renderPatternRows();
+});
+$("plan-expand-btn").addEventListener("click", onExpandPattern);
+$("plan-generate-btn").addEventListener("click", onGenerate);
+$("plan-edit-btn").addEventListener("click", () => {
+  // Just scroll up; the planner is already visible in plan mode.
+  $("plan-controls").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
 $("schedule-table").querySelectorAll("th").forEach(th => {
   th.addEventListener("click", () => {
     const k = th.dataset.sort;
@@ -1146,18 +1526,24 @@ $("late-start").value = state.lateStart;
 $("time-format").value = state.timeFormat;
 syncBucketControlsVisibility();
 
-if (load() && state.games.length) {
+if (load()) {
   $("include-playoffs").checked = !!state.includePlayoffs;
   if (state.playoffCutoff) $("playoff-cutoff").value = state.playoffCutoff;
   $("slot-view").value = state.slotView;
   $("early-end").value = state.earlyEnd;
   $("late-start").value = state.lateStart;
+  $("time-format").value = state.timeFormat;
   syncBucketControlsVisibility();
   if (state.source?.mode === "api" && state.source.company && state.source.leagueId) {
     $("url-input").value = `${state.source.company}/${state.source.leagueId}`;
   }
-  setStatus(`Restored ${state.games.length} games from local cache (${state.source?.mode || "?"} mode).`);
-  render();
+  setMode(state.mode || "analyze");
+  if (state.games.length) {
+    setStatus(`Restored ${state.games.length} games from local cache (${state.source?.mode || "?"} mode).`);
+    render();
+  }
+} else {
+  setMode("analyze");
 }
 </script>
 </body>

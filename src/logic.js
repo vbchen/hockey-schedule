@@ -229,6 +229,215 @@ export function suggestSwaps(games, includePlayoffs, opts, max = 10) {
   return suggestions.slice(0, max);
 }
 
+export function usHolidays(year) {
+  function nthDayOfMonth(month, weekday, n) {
+    const first = new Date(year, month, 1);
+    const offset = (weekday - first.getDay() + 7) % 7;
+    return new Date(year, month, 1 + offset + (n - 1) * 7);
+  }
+  const thx = nthDayOfMonth(10, 4, 4);
+  return [
+    { date: nthDayOfMonth(8, 1, 1), name: "Labor Day" },
+    { date: nthDayOfMonth(9, 1, 2), name: "Indigenous Peoples' Day" },
+    { date: new Date(year, 9, 31), name: "Halloween" },
+    { date: new Date(year, 10, 11), name: "Veterans Day" },
+    { date: thx, name: "Thanksgiving" },
+    { date: new Date(year, 10, thx.getDate() + 1), name: "Black Friday" },
+    { date: new Date(year, 11, 24), name: "Christmas Eve" },
+    { date: new Date(year, 11, 25), name: "Christmas Day" },
+    { date: new Date(year, 11, 31), name: "New Year's Eve" },
+    { date: new Date(year, 0, 1), name: "New Year's Day" },
+    { date: nthDayOfMonth(0, 1, 3), name: "MLK Day" },
+    { date: nthDayOfMonth(1, 1, 3), name: "Presidents' Day" },
+  ];
+}
+
+export function holidaysInRange(startDate, endDate) {
+  if (!startDate || !endDate || endDate < startDate) return [];
+  // Day-granularity bounds — usHolidays returns dates at 00:00, so a slot at
+  // e.g. 21:00 on the same day must still include that day's holiday.
+  const startDay = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const endDay = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59, 999);
+  const out = [];
+  for (let y = startDay.getFullYear(); y <= endDay.getFullYear(); y++) {
+    for (const h of usHolidays(y)) {
+      if (h.date >= startDay && h.date <= endDay) out.push(h);
+    }
+  }
+  out.sort((a, b) => a.date - b.date);
+  return out;
+}
+
+export function holidayMap(startDate, endDate) {
+  const m = new Map();
+  for (const h of holidaysInRange(startDate, endDate)) {
+    m.set(h.date.toDateString(), h.name);
+  }
+  return m;
+}
+
+export function holidayWeekMap(startDate, endDate) {
+  const m = new Map();
+  for (const h of holidaysInRange(startDate, endDate)) {
+    const wk = weekKey(h.date);
+    if (!m.has(wk)) m.set(wk, []);
+    m.get(wk).push(h.name);
+  }
+  return m;
+}
+
+export function expandSlotPattern(patterns, startDate, endDate) {
+  if (!startDate || !endDate || !(patterns && patterns.length)) return [];
+  const start = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const end = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  if (end < start) return [];
+  const out = [];
+  for (const p of patterns) {
+    const wd = +p.weekday;
+    const tm = (p.time || "").match(/^(\d{1,2}):(\d{2})$/);
+    if (!tm) continue;
+    const hh = +tm[1], mm = +tm[2];
+    const freq = p.frequency || "every";
+    const offset = (wd - start.getDay() + 7) % 7;
+    const cur = new Date(start.getFullYear(), start.getMonth(), start.getDate() + offset);
+    let idx = 1;
+    while (cur <= end) {
+      const include =
+        freq === "every" ||
+        (freq === "odd" && (idx % 2) === 1) ||
+        (freq === "even" && (idx % 2) === 0);
+      if (include) {
+        out.push({
+          date: new Date(cur.getFullYear(), cur.getMonth(), cur.getDate(), hh, mm),
+          location: p.location || "",
+        });
+      }
+      cur.setDate(cur.getDate() + 7);
+      idx++;
+    }
+  }
+  out.sort((a, b) => a.date - b.date);
+  return out;
+}
+
+export function generateMatchups(teamCount, targetGamesPerTeam) {
+  if (teamCount < 2 || targetGamesPerTeam < 1) return [];
+  const N = teamCount;
+  const isOdd = N % 2 === 1;
+  const M = isOdd ? N + 1 : N;
+  const PHANTOM = isOdd ? M - 1 : -1;
+
+  function roundPairs(r) {
+    const pos = new Array(M);
+    pos[0] = 0;
+    for (let i = 1; i < M; i++) {
+      pos[i] = ((i - 1 + r) % (M - 1)) + 1;
+    }
+    const pairs = [];
+    for (let i = 0; i < M / 2; i++) {
+      pairs.push([pos[i], pos[M - 1 - i]]);
+    }
+    return pairs;
+  }
+
+  const matchups = [];
+  const gameCount = new Array(N).fill(0);
+
+  let epoch = 0;
+  let progress = true;
+  while (progress && epoch < 100) {
+    progress = false;
+    for (let r = 0; r < M - 1; r++) {
+      // Alternate the home side by both round and epoch. Same-epoch round
+      // alternation balances any team that sits in a fixed circle position
+      // (e.g. team 0 in the circle method); cross-epoch alternation flips
+      // each pair's direction on its second meeting so a complete double
+      // round-robin is perfectly balanced.
+      const flip = (r + epoch) % 2 === 1;
+      for (const [a, b] of roundPairs(r)) {
+        if (a === PHANTOM || b === PHANTOM) continue;
+        if (gameCount[a] >= targetGamesPerTeam) continue;
+        if (gameCount[b] >= targetGamesPerTeam) continue;
+        const home = flip ? b : a;
+        const away = flip ? a : b;
+        matchups.push([home, away]);
+        gameCount[a]++;
+        gameCount[b]++;
+        progress = true;
+      }
+    }
+    epoch++;
+  }
+  return matchups;
+}
+
+export function generateSchedule(teams, slots, targetGamesPerTeam, opts = {}) {
+  if (!teams || teams.length < 2 || !slots || slots.length === 0) return [];
+  const N = teams.length;
+  const cutoff = opts.playoffCutoff || null;
+  // Slots on/after the cutoff are reserved for playoffs — the generator does
+  // not assign matchups to them. Playoff brackets aren't known at planning time.
+  const cutoffMs = cutoff ? new Date(cutoff).getTime() : Infinity;
+  const regSlots = slots.filter(s => s.date.getTime() < cutoffMs);
+  if (regSlots.length === 0) return [];
+
+  const matchups = generateMatchups(N, targetGamesPerTeam);
+  const sortedSlots = regSlots.slice().sort((a, b) => a.date - b.date);
+
+  const used = new Array(matchups.length).fill(false);
+  const teamsByDay = new Map();
+  const games = [];
+
+  for (const slot of sortedSlots) {
+    const dayKey = slot.date.toDateString();
+    const booked = teamsByDay.get(dayKey);
+    let chosen = -1;
+    for (let m = 0; m < matchups.length; m++) {
+      if (used[m]) continue;
+      const [hi, ai] = matchups[m];
+      if (booked && (booked.has(hi) || booked.has(ai))) continue;
+      chosen = m;
+      break;
+    }
+    if (chosen === -1) continue;
+    used[chosen] = true;
+    const [hi, ai] = matchups[chosen];
+    games.push({
+      id: `gen-${games.length + 1}`,
+      date: new Date(slot.date),
+      home: teams[hi],
+      away: teams[ai],
+      location: slot.location,
+      _apiPlayoff: false,
+      isPlayoff: false,
+      slotKey: null,
+    });
+    if (!teamsByDay.has(dayKey)) teamsByDay.set(dayKey, new Set());
+    teamsByDay.get(dayKey).add(hi);
+    teamsByDay.get(dayKey).add(ai);
+  }
+
+  finalizeGames(games, cutoff);
+
+  if (opts.polish !== false && games.length > 0) {
+    const analyzeOpts = {
+      slotView: opts.slotView || "buckets",
+      earlyEnd: opts.earlyEnd || "21:00",
+      lateStart: opts.lateStart || "22:00",
+      cutoffMs: 0,
+    };
+    const maxIters = opts.polishMaxIters != null ? opts.polishMaxIters : 10;
+    for (let it = 0; it < maxIters; it++) {
+      const sugg = suggestSwaps(games, false, analyzeOpts, 1);
+      if (sugg.length === 0 || sugg[0].delta < 1e-6) break;
+      const swapped = swapDates(games, sugg[0].i, sugg[0].j);
+      for (let k = 0; k < games.length; k++) games[k] = swapped[k];
+    }
+  }
+
+  return games;
+}
+
 export function analyze(games, includePlayoffs, opts = {}) {
   const useBuckets = opts.slotView === "buckets";
   const earlyEnd = opts.earlyEnd || "21:00";

@@ -7,15 +7,15 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
   use: {
-    baseURL: "http://localhost:8000",
+    baseURL: "http://localhost:8765",
     trace: "on-first-retry",
   },
   projects: [
     { name: "chromium", use: { ...devices["Desktop Chrome"] } },
   ],
   webServer: {
-    command: "python3 -m http.server 8000",
-    url: "http://localhost:8000",
+    command: "python3 -m http.server 8765",
+    url: "http://localhost:8765",
     reuseExistingServer: !process.env.CI,
     stdout: "ignore",
     stderr: "pipe",

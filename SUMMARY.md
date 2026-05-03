@@ -1,6 +1,41 @@
 # Project changelog
 
 ## 2026-05-03
+- Plan-mode polish: renamed the games-per-team input to "Regular-season
+  games per team" (with a tooltip + footnote) so it's clear playoffs
+  aren't counted; deleting a row from the expanded slot list no longer
+  jumps the scroll position back to the top.
+
+## 2026-05-03
+- Calendar now highlights US holidays observed in the hockey season window
+  (Labor Day → Presidents' Day, plus Halloween / Christmas Eve / NYE / Black
+  Friday). New `usHolidays`, `holidaysInRange`, `holidayMap`, and
+  `holidayWeekMap` exports in `logic.js`. In plan mode, slot list rows
+  display a tag for same-day holidays and a "X week" tag for any other slot
+  that falls in the same Mon–Sun week. Generator no longer assigns matchups
+  to slots on/after the playoff cutoff (and the polish loop runs with
+  `includePlayoffs=false`); UI validation accordingly counts only
+  regular-season slots when checking whether the games-per-team target fits.
+  Slot-list count display now shows `"X regular + Y playoff"` when a cutoff
+  is set. Test counts: vitest 86 → 93.
+
+## 2026-05-03
+- Added "Plan new season" mode alongside the existing analyzer. Top-of-page
+  toggle switches between loading an existing schedule (URL/paste) and a
+  planner panel that takes teams, season window, recurring weekly slot
+  pattern (with per-row Every / Odd / Even frequency to support the
+  alternating-Monday case), and target games-per-team. The planner expands
+  the pattern to a flat slot list the user can edit (bye weeks, time shifts)
+  before generating. Generation uses a circle-method round-robin
+  (`generateMatchups`) and a greedy slot-assignment + `suggestSwaps` polish
+  loop (`generateSchedule`) so the output flows straight into the existing
+  dashboard, calendar, heatmap, and swap-list. New pure functions:
+  `expandSlotPattern`, `generateMatchups`, `generateSchedule`. State now
+  persists `mode` and `planConfig` via localStorage. Switched
+  `playwright.config.js` from port 8000 → 8765 (8000 is in use locally).
+  Test counts: vitest 69 → 86, Playwright 9 → 10.
+
+## 2026-05-03
 - Extracted `parseInputRef` into `src/logic.js` (now takes `defaultCompany`
   as an explicit parameter instead of reading `state.source?.company`).
   Added Playwright coverage for the swap apply/undo flow. Scoped Vitest

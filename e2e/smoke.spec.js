@@ -103,3 +103,27 @@ test("undoing an applied swap removes the Applied card", async ({ page }) => {
   // A regular swap suggestion should still be present.
   await expect(page.locator("#swap-list .swap-card button.primary").first()).toBeVisible();
 });
+
+test("plan mode generates a schedule that flows into the dashboard", async ({ page }) => {
+  await page.goto("/");
+  await page.locator("#mode-plan-btn").click();
+  await expect(page.locator("#plan-controls")).toBeVisible();
+  await expect(page.locator("#analyze-controls")).toBeHidden();
+
+  await page.locator("#plan-teams").fill("Alpha\nBravo\nCharlie\nDelta");
+  await page.locator("#plan-start").fill("2026-09-07");
+  await page.locator("#plan-end").fill("2026-10-05");
+  // Target 2 games × 4 teams / 2 = 4 games needed; 5 slots available.
+  await page.locator("#plan-target").fill("2");
+
+  await page.locator("#plan-expand-btn").click();
+  // Default pattern is Mon 21:00 every week — Sep 7..Oct 5 inclusive = 5 Mondays.
+  await expect(page.locator("#plan-slot-count")).toHaveText("5 slots");
+
+  await page.locator("#plan-generate-btn").click();
+  await expect(page.locator("#dashboard")).toBeVisible();
+  const rows = page.locator("#schedule-table tbody tr");
+  expect(await rows.count()).toBeGreaterThan(0);
+  await expect(page.locator("#calendar")).not.toBeEmpty();
+  await expect(page.locator("#loaded-summary")).toContainText("Planned season");
+});

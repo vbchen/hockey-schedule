@@ -25,6 +25,13 @@ import {
   swapCutoffDate,
   suggestSwaps,
   parseInputRef,
+  expandSlotPattern,
+  generateMatchups,
+  generateSchedule,
+  usHolidays,
+  holidaysInRange,
+  holidayMap,
+  holidayWeekMap,
 } from "../src/logic.js";
 
 function game(id, home, away, date, { isPlayoff = false, location = "Rink 1" } = {}) {
@@ -586,5 +593,297 @@ describe("parseInputRef", () => {
   });
   it("trims surrounding whitespace", () => {
     expect(parseInputRef("  tahl/12345  ")).toEqual({ company: "tahl", leagueId: "12345" });
+  });
+});
+
+describe("expandSlotPattern", () => {
+  // Sep 7 2026 is a Monday. Use this as a stable anchor across these tests.
+  const MON_2026_09_07 = new Date(2026, 8, 7);
+
+  it("returns empty for missing inputs", () => {
+    expect(expandSlotPattern([], MON_2026_09_07, new Date(2026, 8, 30))).toEqual([]);
+    expect(expandSlotPattern([{ weekday: 1, time: "20:00", location: "X", frequency: "every" }],
+      null, new Date(2026, 8, 30))).toEqual([]);
+  });
+
+  it("expands a single weekly pattern across the window inclusively", () => {
+    const out = expandSlotPattern(
+      [{ weekday: 1, time: "21:00", location: "Rink A", frequency: "every" }],
+      MON_2026_09_07,
+      new Date(2026, 8, 28),  // Mon Sep 28
+    );
+    expect(out).toHaveLength(4);
+    expect(out.map(s => s.date.getDate())).toEqual([7, 14, 21, 28]);
+    expect(out.every(s => s.date.getDay() === 1)).toBe(true);
+    expect(out.every(s => s.date.getHours() === 21 && s.date.getMinutes() === 0)).toBe(true);
+    expect(out.every(s => s.location === "Rink A")).toBe(true);
+  });
+
+  it("starts at the first matching weekday at-or-after startDate", () => {
+    // Start on Wed, ask for Mondays — first Mon should be the next one.
+    const out = expandSlotPattern(
+      [{ weekday: 1, time: "20:00", location: "L", frequency: "every" }],
+      new Date(2026, 8, 9),   // Wed Sep 9
+      new Date(2026, 8, 21),  // Mon Sep 21
+    );
+    expect(out.map(s => s.date.getDate())).toEqual([14, 21]);
+  });
+
+  it("odd and even frequencies produce disjoint, complementary date sets", () => {
+    const range = [MON_2026_09_07, new Date(2026, 9, 5)];  // Sep 7 .. Oct 5 (5 Mondays)
+    const odd = expandSlotPattern(
+      [{ weekday: 1, time: "20:00", location: "A", frequency: "odd" }],
+      range[0], range[1],
+    );
+    const even = expandSlotPattern(
+      [{ weekday: 1, time: "20:00", location: "A", frequency: "even" }],
+      range[0], range[1],
+    );
+    expect(odd.map(s => s.date.getDate())).toEqual([7, 21, 5]);
+    expect(even.map(s => s.date.getDate())).toEqual([14, 28]);
+    const oddSet = new Set(odd.map(s => s.date.getTime()));
+    const evenSet = new Set(even.map(s => s.date.getTime()));
+    for (const t of oddSet) expect(evenSet.has(t)).toBe(false);
+  });
+
+  it("merges and chronologically sorts across multiple patterns", () => {
+    // Mon 21:00 + Wed 20:00 over two weeks
+    const out = expandSlotPattern([
+      { weekday: 1, time: "21:00", location: "A", frequency: "every" },
+      { weekday: 3, time: "20:00", location: "B", frequency: "every" },
+    ], MON_2026_09_07, new Date(2026, 8, 16));  // Sep 7 .. Wed Sep 16
+    expect(out.map(s => `${s.date.getMonth()+1}/${s.date.getDate()} ${s.date.getHours()}:${String(s.date.getMinutes()).padStart(2,"0")} ${s.location}`)).toEqual([
+      "9/7 21:00 A",
+      "9/9 20:00 B",
+      "9/14 21:00 A",
+      "9/16 20:00 B",
+    ]);
+  });
+
+  it("supports two same-weekday rows alternating odd/even (the user's monday case)", () => {
+    const out = expandSlotPattern([
+      { weekday: 1, time: "21:00", location: "Rink A", frequency: "odd" },
+      { weekday: 1, time: "22:00", location: "Rink A", frequency: "even" },
+    ], MON_2026_09_07, new Date(2026, 8, 28));  // 4 Mondays
+    expect(out).toHaveLength(4);
+    // Each Monday has exactly one slot, alternating times.
+    expect(out[0].date.getHours()).toBe(21);
+    expect(out[1].date.getHours()).toBe(22);
+    expect(out[2].date.getHours()).toBe(21);
+    expect(out[3].date.getHours()).toBe(22);
+  });
+
+  it("returns empty when end < start", () => {
+    expect(expandSlotPattern(
+      [{ weekday: 1, time: "20:00", location: "L", frequency: "every" }],
+      new Date(2026, 8, 14), new Date(2026, 8, 7),
+    )).toEqual([]);
+  });
+});
+
+describe("generateMatchups", () => {
+  it("returns empty for trivial inputs", () => {
+    expect(generateMatchups(0, 10)).toEqual([]);
+    expect(generateMatchups(1, 10)).toEqual([]);
+    expect(generateMatchups(8, 0)).toEqual([]);
+  });
+
+  it("each team plays exactly target games (even N)", () => {
+    const m = generateMatchups(8, 14);
+    const counts = new Array(8).fill(0);
+    for (const [a, b] of m) { counts[a]++; counts[b]++; }
+    expect(counts.every(c => c === 14)).toBe(true);
+    expect(m.length).toBe(8 * 14 / 2);
+  });
+
+  it("home/away counts are within ±1 per team (even N)", () => {
+    const m = generateMatchups(8, 14);
+    const home = new Array(8).fill(0);
+    const away = new Array(8).fill(0);
+    for (const [h, a] of m) { home[h]++; away[a]++; }
+    for (let i = 0; i < 8; i++) {
+      expect(Math.abs(home[i] - away[i])).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("produces a complete double round-robin when target = 2*(N-1)", () => {
+    // 6 teams × 10 games = 30 = 6*5 = each pair plays twice.
+    const m = generateMatchups(6, 10);
+    const pairCount = {};
+    for (const [a, b] of m) {
+      const k = [a, b].sort().join(",");
+      pairCount[k] = (pairCount[k] || 0) + 1;
+    }
+    const counts = Object.values(pairCount);
+    expect(counts.length).toBe(15);  // C(6, 2)
+    expect(counts.every(c => c === 2)).toBe(true);
+  });
+
+  it("handles odd N by giving each team a bye each round", () => {
+    // 7 teams, target 6 = single round-robin (each plays 6 others).
+    const m = generateMatchups(7, 6);
+    const counts = new Array(7).fill(0);
+    for (const [a, b] of m) { counts[a]++; counts[b]++; }
+    expect(counts.every(c => c === 6)).toBe(true);
+    expect(m.length).toBe(7 * 6 / 2);
+  });
+});
+
+describe("generateSchedule", () => {
+  function pat(weekday, time, location, frequency = "every") {
+    return { weekday, time, location, frequency };
+  }
+
+  it("returns empty for missing inputs", () => {
+    expect(generateSchedule([], [{ date: new Date(), location: "X" }], 10)).toEqual([]);
+    expect(generateSchedule(["A", "B"], [], 10)).toEqual([]);
+  });
+
+  it("produces games in the existing schema with slotKey populated", () => {
+    const slots = expandSlotPattern(
+      [pat(1, "21:00", "Rink A"), pat(3, "20:00", "Rink B")],
+      new Date(2026, 8, 7), new Date(2026, 11, 7),
+    );
+    const games = generateSchedule(["A", "B", "C", "D"], slots, 6, { polish: false });
+    expect(games.length).toBeGreaterThan(0);
+    for (const g of games) {
+      expect(g.id).toMatch(/^gen-/);
+      expect(g.date instanceof Date).toBe(true);
+      expect(typeof g.slotKey).toBe("string");
+      expect(g.slotKey).toMatch(/^(Sun|Mon|Tue|Wed|Thu|Fri|Sat) \d\d:\d\d$/);
+      expect(g.home).toBeTruthy();
+      expect(g.away).toBeTruthy();
+      expect(g.home).not.toBe(g.away);
+      expect(g._apiPlayoff).toBe(false);
+    }
+  });
+
+  it("never schedules a team in two games on the same calendar day", () => {
+    // Force conflicts: 4 teams, 3 slots per day.
+    const slots = [
+      { date: new Date(2026, 8, 7, 20, 0), location: "A" },
+      { date: new Date(2026, 8, 7, 21, 0), location: "A" },
+      { date: new Date(2026, 8, 7, 22, 0), location: "A" },
+      { date: new Date(2026, 8, 14, 20, 0), location: "A" },
+      { date: new Date(2026, 8, 14, 21, 0), location: "A" },
+    ];
+    const games = generateSchedule(["A", "B", "C", "D"], slots, 5, { polish: false });
+    const byDay = new Map();
+    for (const g of games) {
+      const k = g.date.toDateString();
+      if (!byDay.has(k)) byDay.set(k, []);
+      byDay.get(k).push(g);
+    }
+    for (const [, dayGames] of byDay) {
+      const teams = [];
+      for (const g of dayGames) teams.push(g.home, g.away);
+      expect(new Set(teams).size).toBe(teams.length);
+    }
+  });
+
+  it("does not generate any matchups for slots on/after the playoff cutoff", () => {
+    const slots = expandSlotPattern(
+      [pat(1, "20:00", "A")],
+      new Date(2026, 8, 7), new Date(2026, 10, 30),
+    );
+    const cutoff = "2026-11-01";
+    const cutoffMs = new Date(cutoff).getTime();
+    const games = generateSchedule(["A", "B", "C", "D"], slots, 4, { polish: false, playoffCutoff: cutoff });
+    expect(games.length).toBeGreaterThan(0);
+    for (const g of games) {
+      expect(g.date.getTime()).toBeLessThan(cutoffMs);
+      expect(g.isPlayoff).toBe(false);
+    }
+  });
+
+  it("polish step does not increase total penalty", () => {
+    const slots = expandSlotPattern(
+      [pat(1, "20:00", "A"), pat(1, "21:00", "A"), pat(3, "20:00", "B")],
+      new Date(2026, 8, 7), new Date(2026, 10, 30),
+    );
+    const teams = ["A", "B", "C", "D", "E", "F"];
+    const target = 8;
+    const noPolish = generateSchedule(teams, slots, target, { polish: false });
+    const withPolish = generateSchedule(teams, slots, target, { polish: true, polishMaxIters: 5 });
+    const opts = { slotView: "buckets", earlyEnd: "21:00", lateStart: "22:00" };
+    const before = analyze(noPolish, true, opts).total;
+    const after = analyze(withPolish, true, opts).total;
+    expect(after).toBeLessThanOrEqual(before);
+  });
+});
+
+describe("usHolidays", () => {
+  it("computes Thanksgiving as the 4th Thursday of November", () => {
+    const h2026 = usHolidays(2026).find(h => h.name === "Thanksgiving");
+    // 2026-11-26 is a Thursday and is the 4th Thursday of November.
+    expect(h2026.date.getFullYear()).toBe(2026);
+    expect(h2026.date.getMonth()).toBe(10);
+    expect(h2026.date.getDate()).toBe(26);
+    expect(h2026.date.getDay()).toBe(4);
+
+    const h2024 = usHolidays(2024).find(h => h.name === "Thanksgiving");
+    expect(h2024.date.getDate()).toBe(28);  // 2024-11-28
+  });
+
+  it("computes Labor Day as the 1st Monday of September", () => {
+    const h = usHolidays(2026).find(d => d.name === "Labor Day");
+    expect(h.date.getDate()).toBe(7);  // 2026-09-07
+    expect(h.date.getDay()).toBe(1);
+  });
+
+  it("includes fixed-date holidays", () => {
+    const h = usHolidays(2026);
+    const veterans = h.find(d => d.name === "Veterans Day");
+    expect(veterans.date.getDate()).toBe(11);
+    expect(veterans.date.getMonth()).toBe(10);
+    const xmas = h.find(d => d.name === "Christmas Day");
+    expect(xmas.date.getDate()).toBe(25);
+  });
+});
+
+describe("holidaysInRange", () => {
+  it("returns only holidays within the given window, spanning year boundaries", () => {
+    // Hockey season: Sep 1 2026 → Mar 31 2027. Should include both Thanksgiving
+    // 2026 and MLK Day 2027 but exclude Independence Day in either year.
+    const out = holidaysInRange(new Date(2026, 8, 1), new Date(2027, 2, 31));
+    const names = out.map(h => h.name);
+    expect(names).toContain("Labor Day");
+    expect(names).toContain("Thanksgiving");
+    expect(names).toContain("Christmas Day");
+    expect(names).toContain("New Year's Day");
+    expect(names).toContain("MLK Day");
+    expect(names).toContain("Presidents' Day");
+    // No duplicates from the year-boundary scan.
+    const uniq = new Set(names);
+    expect(uniq.size).toBe(names.length);
+  });
+
+  it("returns empty for invalid ranges", () => {
+    expect(holidaysInRange(new Date(2026, 10, 1), new Date(2026, 9, 1))).toEqual([]);
+    expect(holidaysInRange(null, new Date())).toEqual([]);
+  });
+
+  it("includes a same-day holiday even when the bound has a later time-of-day", () => {
+    // The first slot of a typical season starts at 21:00 on Labor Day Mon Sep 7
+    // 2026. Labor Day's date object is at 00:00, so a strict >= comparison
+    // would exclude it; we want day-granularity inclusion.
+    const out = holidaysInRange(new Date(2026, 8, 7, 21, 0), new Date(2026, 9, 5, 22, 0));
+    expect(out.map(h => h.name)).toContain("Labor Day");
+  });
+});
+
+describe("holidayMap and holidayWeekMap", () => {
+  it("flags Thanksgiving on the day and the surrounding Mon–Sun week", () => {
+    const range = [new Date(2026, 10, 1), new Date(2026, 10, 30)];
+    const dayMap = holidayMap(range[0], range[1]);
+    const wkMap = holidayWeekMap(range[0], range[1]);
+    const thx = new Date(2026, 10, 26);
+    expect(dayMap.get(thx.toDateString())).toBe("Thanksgiving");
+    // The Monday of Thanksgiving week is 2026-11-23.
+    const wk = "2026-11-23";
+    expect(wkMap.get(wk)).toContain("Thanksgiving");
+    // The week of 2026-11-16 (Mon) sits between Veterans Day and Thanksgiving
+    // and has no holiday — its key should not appear at all.
+    expect(wkMap.has("2026-11-16")).toBe(false);
   });
 });
