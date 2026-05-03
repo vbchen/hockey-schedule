@@ -83,12 +83,45 @@
   .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; }
   .legend-swatch { width: 14px; height: 14px; border-radius: 3px; }
   .swap-card {
-    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; background: var(--panel-2);
-    display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center;
+    border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; background: var(--panel-2);
+    display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: start;
+    transition: border-color 120ms ease;
   }
-  .swap-card .games { font-size: 13px; }
-  .swap-card .delta { color: var(--good); font-weight: 700; }
-  .swap-card .breakdown { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+  .swap-card:hover { border-color: var(--accent); }
+  .swap-card .swap-main { min-width: 0; }
+  .swap-card .swap-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .swap-card .swap-header { font-size: 13px; margin-bottom: 8px; }
+  .swap-card .moves { display: flex; flex-direction: column; gap: 5px; }
+  .swap-card .move { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; }
+  .swap-card .matchup { display: inline-flex; align-items: center; gap: 3px; }
+  .swap-card .chip {
+    display: inline-block; padding: 2px 7px; border-radius: 3px; font-size: 11px; font-weight: 700;
+    min-width: 32px; text-align: center; letter-spacing: .02em;
+  }
+  .swap-card .vs-mark { color: var(--text-dim); font-size: 10px; padding: 0 1px; }
+  .swap-card .slot {
+    display: inline-block; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--border);
+    font-variant-numeric: tabular-nums; font-size: 12px; background: var(--panel); color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .swap-card .slot.to { border-color: var(--accent); color: var(--text); }
+  .swap-card .arrow { color: var(--text-dim); font-size: 14px; padding: 0 1px; }
+  .swap-card .preview {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+    margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);
+  }
+  .swap-card .preview-cell {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .swap-card .preview-label { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .swap-card .preview-row { display: flex; align-items: center; gap: 6px; font-size: 11.5px; }
+  .swap-card .preview-row.faded { opacity: 0.5; }
+  .swap-card .preview-tag { color: var(--text-dim); font-size: 10px; min-width: 38px; text-transform: uppercase; letter-spacing: .04em; }
+  .swap-card .delta { color: var(--good); font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; }
+  .swap-card .breakdown { font-size: 11.5px; color: var(--text-dim); margin-top: 10px; }
+  .swap-card .breakdown .changed-good { color: var(--good); font-weight: 600; }
+  .swap-card .breakdown .changed-bad { color: var(--warn); font-weight: 600; }
   .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
   .footnote { color: var(--text-dim); font-size: 12px; margin-top: 8px; }
   details > summary { cursor: pointer; color: var(--text-dim); padding: 4px 0; }
@@ -202,6 +235,20 @@
     </div>
 
     <div class="panel">
+      <h2>Monday games per team</h2>
+      <div id="monday-games"></div>
+      <div class="footnote" id="monday-note"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Head-to-head matchups</h2>
+      <div style="overflow-x: auto;">
+        <table class="heatmap" id="matchup-matrix"></table>
+      </div>
+      <div class="footnote" id="matchup-note"></div>
+    </div>
+
+    <div class="panel">
       <h2>Same-matchup back-to-back</h2>
       <ul class="b2b-list" id="b2b-list"></ul>
     </div>
@@ -218,8 +265,8 @@
     <details>
       <summary>About / how this works</summary>
       <p>Loads the schedule from DaySmart Recreation's public JSON:API (no login, no scraping). Stores in your browser's localStorage. Detects four issue classes and lets you simulate single-swap fixes that improve fairness.</p>
-      <p><strong>Issue weights</strong> (penalty function): game-count variance ×4, home/away imbalance ×2, slot-distribution variance ×1, same-matchup back-to-back ×8.</p>
-      <p><strong>Caveats:</strong> A date-swap can't fix uneven game counts or home/away imbalance — those need a matchup change. The swap engine still suggests fixes for slot fairness and back-to-back issues.</p>
+      <p><strong>Issue weights</strong> (penalty function): game-count variance ×4, home/away imbalance ×2, slot-distribution variance ×1, Monday-share variance ×2 (Mondays are treated as less-desirable than other nights), head-to-head matchup variance ×3, same-matchup back-to-back ×8.</p>
+      <p><strong>Caveats:</strong> A date-swap can't fix uneven game counts, home/away imbalance, or head-to-head matchup counts — those depend on the matchup list itself, not when games are scheduled. The swap engine still suggests fixes for slot fairness and back-to-back issues.</p>
     </details>
   </div>
 
@@ -238,6 +285,8 @@ const W_GAMECOUNT = 4;
 const W_HOMEAWAY = 2;
 const W_SLOT = 1;
 const W_B2B = 8;
+const W_MATCHUP = 3;
+const W_MONDAY = 2;
 
 // Team colors → background; pick text color for contrast.
 const TEAM_STYLE = {
@@ -553,6 +602,39 @@ function analyze(games, includePlayoffs, opts = {}) {
     }
   }
 
+  const mondayCount = Object.fromEntries(teams.map(t => [t, 0]));
+  let mondayTotal = 0;
+  for (const g of fair) {
+    if (g.date.getDay() === 1) {
+      if (mondayCount[g.home] != null) mondayCount[g.home]++;
+      if (mondayCount[g.away] != null) mondayCount[g.away]++;
+      mondayTotal++;
+    }
+  }
+  const mondayExpected = teams.length ? (mondayTotal * 2) / teams.length : 0;
+  let mondayPenalty = 0;
+  for (const t of teams) {
+    mondayPenalty += (mondayCount[t] - mondayExpected) ** 2;
+  }
+
+  const matchups = {};
+  for (const t of teams) matchups[t] = Object.fromEntries(teams.map(o => [o, 0]));
+  for (const g of fair) {
+    if (matchups[g.home] && matchups[g.home][g.away] != null) matchups[g.home][g.away]++;
+    if (matchups[g.away] && matchups[g.away][g.home] != null) matchups[g.away][g.home]++;
+  }
+  let matchupPenalty = 0;
+  let matchupExpected = 0;
+  if (teams.length >= 2) {
+    matchupExpected = (2 * fair.length) / (teams.length * (teams.length - 1));
+    for (let i = 0; i < teams.length; i++) {
+      for (let j = i + 1; j < teams.length; j++) {
+        const c = matchups[teams[i]][teams[j]];
+        matchupPenalty += (c - matchupExpected) ** 2;
+      }
+    }
+  }
+
   const b2b = [];
   for (const t of teams) {
     const myGames = games.filter(g => g.home === t || g.away === t).sort((a,b)=>a.date - b.date);
@@ -576,18 +658,24 @@ function analyze(games, includePlayoffs, opts = {}) {
     W_GAMECOUNT * gameCountPenalty +
     W_HOMEAWAY * homeAwayPenalty +
     W_SLOT * slotPenalty +
-    W_B2B * b2bPenalty;
+    W_B2B * b2bPenalty +
+    W_MATCHUP * matchupPenalty +
+    W_MONDAY * mondayPenalty;
 
   return {
     teams, slots, gameCount, median,
     homeAway: ha,
     slotMatrix, slotExpectedPerTeam,
+    matchups, matchupExpected,
+    mondayCount, mondayTotal, mondayExpected,
     b2b: b2bUnique,
     breakdown: {
       gameCount: W_GAMECOUNT * gameCountPenalty,
       homeAway: W_HOMEAWAY * homeAwayPenalty,
       slot: W_SLOT * slotPenalty,
       b2b: W_B2B * b2bPenalty,
+      matchup: W_MATCHUP * matchupPenalty,
+      monday: W_MONDAY * mondayPenalty,
     },
     total,
   };
@@ -608,12 +696,24 @@ function slotCmp(a, b) {
 
 // ---------- Swap engine ----------
 
+function swapCutoffDate() {
+  // Start of the Monday after next, local time. Past games plus the current
+  // and upcoming Mon–Sun weeks are treated as locked in (too soon to move).
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+  const daysUntilNextMonday = day === 0 ? 1 : (8 - day);
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysUntilNextMonday + 7);
+}
+
 function suggestSwaps(games, includePlayoffs, opts, max=10) {
   const baseAnalysis = analyze(games, includePlayoffs, opts);
   const baseTotal = baseAnalysis.total;
+  const cutoffMs = opts.cutoffMs || 0;
   const suggestions = [];
   for (let i = 0; i < games.length; i++) {
+    if (games[i].date.getTime() < cutoffMs) continue;
     for (let j = i + 1; j < games.length; j++) {
+      if (games[j].date.getTime() < cutoffMs) continue;
       if (games[i].date.getTime() === games[j].date.getTime()) continue;
       const swapped = swapDates(games, i, j);
       if (hasTeamConflict(swapped)) continue;
@@ -669,6 +769,13 @@ function fmtDate(d) {
   return d.toLocaleString(undefined, { month: "numeric", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+function fmtDateLong(d) {
+  const wk = WEEKDAY[d.getDay()];
+  const md = d.toLocaleString(undefined, { month: "short", day: "numeric" });
+  const time = formatTime24(`${pad2(d.getHours())}:${pad2(d.getMinutes())}`);
+  return `${wk} ${md} · ${time}`;
+}
+
 function render() {
   if (!state.games.length) {
     $("dashboard").style.display = "none";
@@ -687,13 +794,15 @@ function render() {
   const analysis = analyze(state.games, state.includePlayoffs, opts);
   $("penalty-summary").textContent =
     `Penalty: ${analysis.total.toFixed(1)}   ` +
-    `(games ${analysis.breakdown.gameCount.toFixed(1)} · h/a ${analysis.breakdown.homeAway.toFixed(1)} · slots ${analysis.breakdown.slot.toFixed(1)} · b2b ${analysis.breakdown.b2b.toFixed(1)})`;
+    `(games ${analysis.breakdown.gameCount.toFixed(1)} · h/a ${analysis.breakdown.homeAway.toFixed(1)} · slots ${analysis.breakdown.slot.toFixed(1)} · mondays ${analysis.breakdown.monday.toFixed(1)} · matchups ${analysis.breakdown.matchup.toFixed(1)} · b2b ${analysis.breakdown.b2b.toFixed(1)})`;
 
   renderSchedule();
   renderCalendar();
   renderGamesPerTeam(analysis);
   renderHomeAway(analysis);
   renderHeatmap(analysis);
+  renderMonday(analysis);
+  renderMatchups(analysis);
   renderB2B(analysis);
   renderSwaps(analysis);
 }
@@ -771,7 +880,7 @@ function renderCalendar() {
         const time = state.timeFormat === "24h"
           ? `${pad2(hh)}:${pad2(mm)}`
           : `${((hh + 11) % 12 + 1)}:${pad2(mm)}${hh >= 12 ? "p" : "a"}`;
-        cellChildren.push(h("div", { class: "cal-game", title: `${g.home} (home) vs ${g.away} (away) — ${fmtDate(g.date)}` },
+        cellChildren.push(h("div", { class: "cal-game", title: `${g.home} (home) vs ${g.away} (away) — ${fmtDateLong(g.date)}` },
           h("div", { class: "time" }, time),
           h("div", { class: "half", style: { background: sh.bg, color: sh.fg } }, sh.abbr),
           h("div", { class: "half", style: { background: sa.bg, color: sa.fg } }, sa.abbr),
@@ -863,6 +972,77 @@ function renderHeatmap(a) {
   mount($("heatmap"), thead, tbody);
 }
 
+function renderMonday(a) {
+  const exp = a.mondayExpected;
+  const max = Math.max(...Object.values(a.mondayCount), 1);
+  const rows = a.teams.map(t => {
+    const c = a.mondayCount[t];
+    const dev = Math.abs(c - exp);
+    const cls = dev < 0.75 ? "good" : dev < 1.75 ? "warn" : "bad";
+    return h("div", { class: "bar-row" },
+      h("div", null, t),
+      h("div", null, h("div", { class: `bar ${cls}`, style: { width: `${(c / max) * 100}%` } })),
+      h("div", { class: "num" }, c),
+    );
+  });
+  mount($("monday-games"), rows);
+  $("monday-note").textContent = a.mondayTotal === 0
+    ? "No Monday games in the (currently filtered) schedule."
+    : `${a.mondayTotal} Monday game${a.mondayTotal === 1 ? "" : "s"} total · expected ~${exp.toFixed(1)} per team if shared evenly · penalty contribution ${a.breakdown.monday.toFixed(1)}.`;
+}
+
+function renderMatchups(a) {
+  const teams = a.teams;
+  const exp = a.matchupExpected;
+  const thead = h("thead", null, h("tr", null,
+    h("th"),
+    teams.map(t => {
+      const s = styleOf(t);
+      return h("th", { title: t, style: { background: s.bg, color: s.fg } }, s.abbr);
+    }),
+    h("th", null, "Σ"),
+  ));
+  const tbody = h("tbody", null, teams.map(t1 => {
+    let row = 0;
+    const cells = teams.map(t2 => {
+      if (t1 === t2) {
+        return h("td", { class: "cell muted", style: { background: "var(--panel-2)" } }, "—");
+      }
+      const c = a.matchups[t1][t2];
+      row += c;
+      const dev = c - exp;
+      const intensity = Math.min(1, Math.abs(dev) / Math.max(1, exp));
+      const bg = dev > 0
+        ? `hsla(0, 70%, 50%, ${intensity * 0.6})`
+        : dev < 0
+        ? `hsla(210, 70%, 50%, ${intensity * 0.4})`
+        : "transparent";
+      return h("td", { class: "cell", style: { background: bg }, title: `${t1} vs ${t2}: ${c}` }, c);
+    });
+    const s1 = styleOf(t1);
+    return h("tr", null,
+      h("td", { class: "team", title: t1 }, t1),
+      cells,
+      h("td", { class: "cell num" }, row),
+    );
+  }));
+  mount($("matchup-matrix"), thead, tbody);
+
+  const note = $("matchup-note");
+  const expStr = exp ? exp.toFixed(2) : "0";
+  if (a.breakdown.matchup > 0) {
+    mount(note,
+      h("span", { class: "err" }, "Matchup imbalance detected. "),
+      `Each pair should play ~${expStr} times. `,
+      h("em", null, "A date-swap can't fix this — only changing matchups can."),
+    );
+  } else if (a.teams.length >= 2) {
+    mount(note, `Every pair plays ${expStr} times. ✓`);
+  } else {
+    clear(note);
+  }
+}
+
 function renderB2B(a) {
   const ul = $("b2b-list");
   if (a.b2b.length === 0) {
@@ -872,52 +1052,136 @@ function renderB2B(a) {
   mount(ul, a.b2b.map(x => h("li", null,
     h("strong", null, x.team), " plays ",
     h("strong", null, x.opponent), " twice in a row: ",
-    h("span", { class: "tag" }, fmtDate(x.gameA.date)),
+    h("span", { class: "tag" }, fmtDateLong(x.gameA.date)),
     " → ",
-    h("span", { class: "tag" }, fmtDate(x.gameB.date)),
+    h("span", { class: "tag" }, fmtDateLong(x.gameB.date)),
   )));
+}
+
+function teamChip(team) {
+  const s = styleOf(team);
+  return h("span", {
+    class: "chip",
+    title: team,
+    style: { background: s.bg, color: s.fg },
+  }, s.abbr);
+}
+
+function matchupChips(g) {
+  return h("span", { class: "matchup" },
+    teamChip(g.home),
+    h("span", { class: "vs-mark" }, "vs"),
+    teamChip(g.away),
+  );
+}
+
+function breakdownNode(before, after) {
+  const terms = [
+    ["games",    "gameCount"],
+    ["h/a",      "homeAway"],
+    ["slots",    "slot"],
+    ["mondays",  "monday"],
+    ["matchups", "matchup"],
+    ["b2b",      "b2b"],
+  ];
+  const parts = [];
+  for (const [label, key] of terms) {
+    const b = before[key], a = after[key];
+    if (parts.length) parts.push(" · ");
+    parts.push(`${label} `);
+    if (Math.abs(a - b) < 1e-6) {
+      parts.push(b.toFixed(1));
+    } else {
+      const cls = a < b ? "changed-good" : "changed-bad";
+      parts.push(h("span", { class: cls }, `${b.toFixed(1)}→${a.toFixed(1)}`));
+    }
+  }
+  return h("div", { class: "breakdown" }, ...parts);
+}
+
+function buildSwapCard(s, n) {
+  const ga = state.games[s.i], gb = state.games[s.j];
+  const aDate = fmtDateLong(ga.date);
+  const bDate = fmtDateLong(gb.date);
+
+  const moves = h("div", { class: "moves" },
+    h("div", { class: "move" },
+      matchupChips(ga),
+      h("span", { class: "slot from" }, aDate),
+      h("span", { class: "arrow" }, "→"),
+      h("span", { class: "slot to" }, bDate),
+    ),
+    h("div", { class: "move" },
+      matchupChips(gb),
+      h("span", { class: "slot from" }, bDate),
+      h("span", { class: "arrow" }, "→"),
+      h("span", { class: "slot to" }, aDate),
+    ),
+  );
+
+  const previewCell = (label, nowGame, afterGame) => h("div", { class: "preview-cell" },
+    h("div", { class: "preview-label" }, label),
+    h("div", { class: "preview-row faded" },
+      h("span", { class: "preview-tag" }, "now"),
+      matchupChips(nowGame),
+    ),
+    h("div", { class: "preview-row" },
+      h("span", { class: "preview-tag" }, "after"),
+      matchupChips(afterGame),
+    ),
+  );
+
+  const preview = h("div", { class: "preview" },
+    previewCell(aDate, ga, gb),
+    previewCell(bDate, gb, ga),
+  );
+
+  const card = h("div", { class: "swap-card" },
+    h("div", { class: "swap-main" },
+      h("div", { class: "swap-header" },
+        h("strong", null, `${n + 1}.`), " ",
+        h("span", { class: "muted" }, "Swap these two games"),
+      ),
+      moves,
+      preview,
+      breakdownNode(s.before, s.after),
+    ),
+    h("div", { class: "swap-side" },
+      h("div", { class: "delta" }, `−${s.delta.toFixed(2)}`),
+      h("button", {
+        class: "primary",
+        onclick: () => applySwap(s.i, s.j),
+      }, "Apply"),
+    ),
+  );
+
+  return card;
 }
 
 function renderSwaps(analysis) {
   const list = $("swap-list");
   mount(list, h("div", { class: "muted" }, "Computing…"));
   requestAnimationFrame(() => {
-    const opts = { slotView: state.slotView, earlyEnd: state.earlyEnd, lateStart: state.lateStart };
+    const cutoff = swapCutoffDate();
+    const cutoffStr = cutoff.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+    const cutoffNote = h("div", {
+      class: "muted",
+      style: { fontSize: "12px", marginBottom: "10px" },
+    }, `Excluding games before ${cutoffStr} — this week and next are treated as locked in.`);
+
+    const opts = {
+      slotView: state.slotView, earlyEnd: state.earlyEnd, lateStart: state.lateStart,
+      cutoffMs: cutoff.getTime(),
+    };
     const sugg = suggestSwaps(state.games, state.includePlayoffs, opts, 10);
     if (sugg.length === 0) {
-      mount(list, h("div", { class: "muted" },
+      mount(list, cutoffNote, h("div", { class: "muted" },
         analysis.total === 0
           ? "Schedule is already balanced."
-          : "No improving single swaps found. Remaining penalty may need a matchup change."));
+          : "No improving single swaps found among remaining games. Remaining penalty may need a matchup change."));
       return;
     }
-    const cards = sugg.map((s, n) => {
-      const ga = state.games[s.i], gb = state.games[s.j];
-      const detail =
-        `games ${s.before.gameCount.toFixed(1)}→${s.after.gameCount.toFixed(1)} · ` +
-        `h/a ${s.before.homeAway.toFixed(1)}→${s.after.homeAway.toFixed(1)} · ` +
-        `slots ${s.before.slot.toFixed(1)}→${s.after.slot.toFixed(1)} · ` +
-        `b2b ${s.before.b2b.toFixed(1)}→${s.after.b2b.toFixed(1)}`;
-      return h("div", { class: "swap-card" },
-        h("div", { class: "games" },
-          h("div", null, h("strong", null, `${n+1}. `), "Swap dates of:"),
-          h("div", null, "  ", h("span", { class: "tag" }, `G${s.i+1}`), " ",
-            `${ga.home} vs ${ga.away} — ${fmtDate(ga.date)}`),
-          h("div", null, "  ", h("span", { class: "tag" }, `G${s.j+1}`), " ",
-            `${gb.home} vs ${gb.away} — ${fmtDate(gb.date)}`),
-          h("div", { class: "breakdown" }, detail),
-        ),
-        h("div", { style: { textAlign: "right" } },
-          h("div", { class: "delta" }, `−${s.delta.toFixed(2)}`),
-          h("button", {
-            class: "primary",
-            style: { marginTop: "6px" },
-            onclick: () => applySwap(s.i, s.j),
-          }, "Apply"),
-        ),
-      );
-    });
-    mount(list, cards);
+    mount(list, cutoffNote, ...sugg.map((s, n) => buildSwapCard(s, n)));
   });
 }
 
