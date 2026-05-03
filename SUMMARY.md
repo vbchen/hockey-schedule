@@ -1,6 +1,14 @@
 # Project changelog
 
 ## 2026-05-03
+- Extracted the remaining testable logic (`formatTime24`, `formatSlotKey`,
+  `applyPlayoffCutoff`, `finalizeGames`, `parsePastedText`, `swapCutoffDate`,
+  `suggestSwaps`) into `src/logic.js`. Where these functions previously read
+  `state.timeFormat` or `state.playoffCutoff` directly, they now take the
+  value as an explicit parameter; call sites in `index.html` were updated
+  to pass it. Test count: 39 → 60.
+
+## 2026-05-03
 - Added unit-testing pilot. Extracted pure logic from `index.html` into
   `src/logic.js` as an ES module (date/slot helpers, serializers,
   `analyze`, `swapDates`, `hasTeamConflict`, etc.). `index.html`'s

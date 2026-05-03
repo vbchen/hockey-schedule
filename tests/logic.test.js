@@ -17,6 +17,13 @@ import {
   serializeApplied,
   deserializeApplied,
   analyze,
+  formatTime24,
+  formatSlotKey,
+  applyPlayoffCutoff,
+  finalizeGames,
+  parsePastedText,
+  swapCutoffDate,
+  suggestSwaps,
 } from "../src/logic.js";
 
 function game(id, home, away, date, { isPlayoff = false, location = "Rink 1" } = {}) {
@@ -329,5 +336,217 @@ describe("analyze", () => {
     ];
     const a = analyze(games, false, { slotView: "buckets", earlyEnd: "21:00", lateStart: "22:00" });
     expect(a.slots).toEqual(["early", "late"]);
+  });
+});
+
+describe("formatTime24", () => {
+  it("returns input unchanged in 24h mode", () => {
+    expect(formatTime24("19:30", "24h")).toBe("19:30");
+    expect(formatTime24("00:00", "24h")).toBe("00:00");
+  });
+  it("converts to 12h with AM/PM otherwise", () => {
+    expect(formatTime24("00:00", "12h")).toBe("12:00 AM");
+    expect(formatTime24("00:30", "12h")).toBe("12:30 AM");
+    expect(formatTime24("11:59", "12h")).toBe("11:59 AM");
+    expect(formatTime24("12:00", "12h")).toBe("12:00 PM");
+    expect(formatTime24("12:30", "12h")).toBe("12:30 PM");
+    expect(formatTime24("13:30", "12h")).toBe("1:30 PM");
+    expect(formatTime24("23:59", "12h")).toBe("11:59 PM");
+  });
+});
+
+describe("formatSlotKey", () => {
+  it("formats the time portion while preserving the day", () => {
+    expect(formatSlotKey("Mon 19:30", "24h")).toBe("Mon 19:30");
+    expect(formatSlotKey("Mon 19:30", "12h")).toBe("Mon 7:30 PM");
+    expect(formatSlotKey("Sat 22:00", "12h")).toBe("Sat 10:00 PM");
+  });
+  it("returns the input unchanged when there is no space", () => {
+    expect(formatSlotKey("bucket", "12h")).toBe("bucket");
+  });
+});
+
+describe("applyPlayoffCutoff", () => {
+  function mkGame(date, apiPlayoff = false) {
+    return { date, _apiPlayoff: apiPlayoff, isPlayoff: false };
+  }
+  it("flags games on or after the cutoff", () => {
+    const games = [
+      mkGame(new Date(2025, 0, 1)),
+      mkGame(new Date(2025, 1, 15)),
+      mkGame(new Date(2025, 2, 1)),
+    ];
+    applyPlayoffCutoff(games, "2025-02-01T00:00");
+    expect(games.map(g => g.isPlayoff)).toEqual([false, true, true]);
+  });
+  it("respects the _apiPlayoff flag even with no cutoff", () => {
+    const games = [
+      mkGame(new Date(2025, 0, 1), true),
+      mkGame(new Date(2025, 0, 2)),
+    ];
+    applyPlayoffCutoff(games, null);
+    expect(games[0].isPlayoff).toBe(true);
+    expect(games[1].isPlayoff).toBe(false);
+  });
+  it("recomputes (not just sets) isPlayoff — clearing cutoff unflags non-API games", () => {
+    const games = [mkGame(new Date(2025, 0, 1))];
+    applyPlayoffCutoff(games, "2024-12-01T00:00");
+    expect(games[0].isPlayoff).toBe(true);
+    applyPlayoffCutoff(games, null);
+    expect(games[0].isPlayoff).toBe(false);
+  });
+  it("mutates the input array in place", () => {
+    const games = [{ date: new Date(2025, 0, 1), _apiPlayoff: false, isPlayoff: false }];
+    const result = applyPlayoffCutoff(games, "2024-12-01T00:00");
+    expect(result).toBeUndefined();
+    expect(games[0].isPlayoff).toBe(true);
+  });
+});
+
+describe("finalizeGames", () => {
+  it("sorts games by date and populates slotKey", () => {
+    const games = [
+      { id: "2", home: "A", away: "B", date: new Date(2025, 0, 13, 19, 30), isPlayoff: false, _apiPlayoff: false },
+      { id: "1", home: "C", away: "D", date: new Date(2025, 0, 6, 21, 0), isPlayoff: false, _apiPlayoff: false },
+    ];
+    finalizeGames(games, null);
+    expect(games[0].id).toBe("1");
+    expect(games[0].slotKey).toBe("Mon 21:00");
+    expect(games[1].id).toBe("2");
+    expect(games[1].slotKey).toBe("Mon 19:30");
+  });
+  it("applies the playoff cutoff during finalization", () => {
+    const games = [
+      { id: "1", home: "A", away: "B", date: new Date(2025, 0, 6, 19, 30), isPlayoff: false, _apiPlayoff: false },
+      { id: "2", home: "A", away: "B", date: new Date(2025, 1, 17, 19, 30), isPlayoff: false, _apiPlayoff: false },
+    ];
+    finalizeGames(games, "2025-02-01T00:00");
+    expect(games[0].isPlayoff).toBe(false);
+    expect(games[1].isPlayoff).toBe(true);
+  });
+});
+
+describe("parsePastedText", () => {
+  it("parses 3-line records", () => {
+    const text = [
+      "Pylons\tNailers",
+      "Rink 1",
+      "1/6/2025 7:30 pm",
+      "Brewins\tIce Aged",
+      "Rink 2",
+      "1/13/2025 9:00 pm",
+    ].join("\n");
+    const games = parsePastedText(text, null);
+    expect(games.length).toBe(2);
+    expect(games[0].home).toBe("Pylons");
+    expect(games[0].away).toBe("Nailers");
+    expect(games[0].location).toBe("Rink 1");
+    expect(games[0].slotKey).toBe("Mon 19:30");
+    expect(games[1].home).toBe("Brewins");
+    expect(games[1].slotKey).toBe("Mon 21:00");
+  });
+  it("skips pagination markers and header lines", () => {
+    const text = [
+      "1",
+      "« 2 (current) »",
+      "home\taway\ttime",
+      "Pylons\tNailers",
+      "Rink 1",
+      "1/6/2025 7:30 pm",
+    ].join("\n");
+    const games = parsePastedText(text, null);
+    expect(games.length).toBe(1);
+    expect(games[0].home).toBe("Pylons");
+  });
+  it("honors the playoff cutoff", () => {
+    const text = [
+      "A\tB",
+      "Rink 1",
+      "1/6/2025 7:30 pm",
+      "A\tB",
+      "Rink 1",
+      "2/17/2025 9:00 pm",
+    ].join("\n");
+    const games = parsePastedText(text, "2025-02-01T00:00");
+    expect(games[0].isPlayoff).toBe(false);
+    expect(games[1].isPlayoff).toBe(true);
+  });
+});
+
+describe("swapCutoffDate", () => {
+  it("returns the start of the Monday after next, local midnight", () => {
+    // Wed Jan 1 2025 → next Mon = Jan 6, Monday after next = Jan 13
+    const cutoff = swapCutoffDate(new Date(2025, 0, 1, 14, 30));
+    expect(cutoff.getFullYear()).toBe(2025);
+    expect(cutoff.getMonth()).toBe(0);
+    expect(cutoff.getDate()).toBe(13);
+    expect(cutoff.getHours()).toBe(0);
+    expect(cutoff.getMinutes()).toBe(0);
+  });
+  it("when 'now' is a Monday, advances 14 days", () => {
+    // Mon Jan 6 2025 → Jan 20
+    const cutoff = swapCutoffDate(new Date(2025, 0, 6, 12, 0));
+    expect(cutoff.getDate()).toBe(20);
+  });
+  it("when 'now' is a Sunday, advances 8 days", () => {
+    // Sun Jan 5 2025 → Mon Jan 13
+    const cutoff = swapCutoffDate(new Date(2025, 0, 5, 12, 0));
+    expect(cutoff.getDate()).toBe(13);
+  });
+  it("uses Date.now() when called with no argument", () => {
+    expect(swapCutoffDate() instanceof Date).toBe(true);
+  });
+});
+
+describe("suggestSwaps", () => {
+  it("returns [] when no swap improves the schedule", () => {
+    // 3-team round-robin already has 0 b2b penalty; nothing to gain.
+    const games = [
+      game("1", "A", "B", new Date(2025, 0, 6, 19, 30)),
+      game("2", "A", "C", new Date(2025, 0, 13, 19, 30)),
+      game("3", "B", "C", new Date(2025, 0, 20, 19, 30)),
+    ];
+    expect(suggestSwaps(games, false, {})).toEqual([]);
+  });
+
+  it("finds a swap that breaks up a back-to-back", () => {
+    // A's first two games are both vs B (b2b penalty 8). Swapping game 2
+    // (B-A) with game 4 (B-D) puts game 3 (A-C) between them, breaking
+    // both A's and B's same-opponent consecutive streaks.
+    const games = [
+      game("1", "A", "B", new Date(2025, 0, 6, 19, 30)),
+      game("2", "B", "A", new Date(2025, 0, 13, 19, 30)),
+      game("3", "A", "C", new Date(2025, 0, 20, 19, 30)),
+      game("4", "B", "D", new Date(2025, 0, 27, 19, 30)),
+    ];
+    const out = suggestSwaps(games, false, {});
+    expect(out.length).toBeGreaterThan(0);
+    expect(out[0].delta).toBeGreaterThan(0);
+    // The fix should swap dates between games 2 and 4.
+    const top = out[0];
+    expect([top.i, top.j].sort()).toEqual([1, 3]);
+  });
+
+  it("respects opts.cutoffMs by skipping pre-cutoff games", () => {
+    const games = [
+      game("1", "A", "B", new Date(2025, 0, 6, 19, 30)),
+      game("2", "B", "A", new Date(2025, 0, 13, 19, 30)),
+      game("3", "C", "D", new Date(2025, 0, 20, 19, 30)),
+    ];
+    // Cutoff after all games → no swaps eligible.
+    const cutoffMs = new Date(2025, 1, 1).getTime();
+    expect(suggestSwaps(games, false, { cutoffMs })).toEqual([]);
+  });
+
+  it("caps the result at `max`", () => {
+    const games = [
+      game("1", "A", "B", new Date(2025, 0, 6, 19, 30)),
+      game("2", "B", "A", new Date(2025, 0, 13, 19, 30)),
+      game("3", "A", "B", new Date(2025, 0, 20, 19, 30)),
+      game("4", "C", "D", new Date(2025, 0, 27, 19, 30)),
+      game("5", "C", "D", new Date(2025, 1, 3, 19, 30)),
+    ];
+    const out = suggestSwaps(games, false, {}, 2);
+    expect(out.length).toBeLessThanOrEqual(2);
   });
 });

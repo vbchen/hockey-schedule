@@ -327,6 +327,13 @@ import {
   serializeApplied,
   deserializeApplied,
   analyze,
+  formatTime24,
+  formatSlotKey,
+  applyPlayoffCutoff,
+  finalizeGames,
+  parsePastedText,
+  swapCutoffDate,
+  suggestSwaps,
 } from "./src/logic.js";
 
 // ---------- Constants ----------
@@ -483,125 +490,11 @@ async function fetchLeague(company, leagueId) {
     })
     .filter(g => g.home && g.away && !isNaN(g.date));
 
-  finalizeGames(games);
+  finalizeGames(games, state.playoffCutoff);
   return { league, teams, games };
 }
 
-// ---------- Paste parser ----------
-
-function parsePastedText(text) {
-  const PAGINATION = /^\s*(«|»|…|\.\.\.|\d+\s*\(current\)|\d+)\s*$/;
-  const HEADER = /home\s*\t.*away/i;
-
-  const lines = text.split(/\r?\n/)
-    .map(s => s.trim())
-    .filter(s => s.length > 0)
-    .filter(s => !PAGINATION.test(s))
-    .filter(s => !HEADER.test(s));
-
-  const games = [];
-  for (let i = 0; i + 2 < lines.length; ) {
-    const teamLine = lines[i];
-    const locLine = lines[i + 1];
-    const dtLine = lines[i + 2];
-    const fields = teamLine.split(/\t+/).map(s => s.trim()).filter(Boolean);
-    const dt = parsePasteDate(dtLine);
-    if (fields.length >= 2 && !isNaN(dt)) {
-      games.push({
-        id: `paste-${games.length + 1}`,
-        date: dt,
-        home: fields[0],
-        away: fields[1],
-        location: locLine,
-        _apiPlayoff: false,
-        isPlayoff: false,
-        slotKey: null,
-      });
-      i += 3;
-    } else {
-      i += 1;
-    }
-  }
-  finalizeGames(games);
-  return games;
-}
-
-// ---------- Common post-processing ----------
-
-function finalizeGames(games) {
-  games.sort((a, b) => a.date - b.date);
-  for (const g of games) {
-    g.slotKey = `${WEEKDAY[g.date.getDay()]} ${pad2(g.date.getHours())}:${pad2(g.date.getMinutes())}`;
-  }
-  applyPlayoffCutoff(games);
-}
-
-function applyPlayoffCutoff(games) {
-  const cutoffMs = state.playoffCutoff ? new Date(state.playoffCutoff).getTime() : null;
-  for (const g of games) {
-    const fromApi = g._apiPlayoff === true;
-    const fromCutoff = cutoffMs != null && g.date.getTime() >= cutoffMs;
-    g.isPlayoff = fromApi || fromCutoff;
-  }
-}
-
-function formatTime24(t) {
-  if (state.timeFormat === "24h") return t;
-  // t = "HH:MM" -> "h:mm AM/PM"
-  const [hh, mm] = t.split(":").map(Number);
-  const ap = hh >= 12 ? "PM" : "AM";
-  const h12 = ((hh + 11) % 12) + 1;
-  return `${h12}:${pad2(mm)} ${ap}`;
-}
-
-function formatSlotKey(slotKey) {
-  // "Mon 22:15" -> "Mon 22:15" or "Mon 10:15 PM"
-  const sp = slotKey.indexOf(" ");
-  if (sp < 0) return slotKey;
-  return slotKey.slice(0, sp) + " " + formatTime24(slotKey.slice(sp + 1));
-}
-
-// ---------- Analyzer ----------
-
 const BUCKET_LABEL = { early: "Early", middle: "Middle", late: "Late" };
-
-// ---------- Swap engine ----------
-
-function swapCutoffDate() {
-  // Start of the Monday after next, local time. Past games plus the current
-  // and upcoming Mon–Sun weeks are treated as locked in (too soon to move).
-  const now = new Date();
-  const day = now.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-  const daysUntilNextMonday = day === 0 ? 1 : (8 - day);
-  return new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysUntilNextMonday + 7);
-}
-
-function suggestSwaps(games, includePlayoffs, opts, max=10) {
-  const baseAnalysis = analyze(games, includePlayoffs, opts);
-  const baseTotal = baseAnalysis.total;
-  const cutoffMs = opts.cutoffMs || 0;
-  const suggestions = [];
-  for (let i = 0; i < games.length; i++) {
-    if (games[i].date.getTime() < cutoffMs) continue;
-    for (let j = i + 1; j < games.length; j++) {
-      if (games[j].date.getTime() < cutoffMs) continue;
-      if (games[i].date.getTime() === games[j].date.getTime()) continue;
-      const swapped = swapDates(games, i, j);
-      if (hasTeamConflict(swapped)) continue;
-      const aft = analyze(swapped, includePlayoffs, opts);
-      const delta = baseTotal - aft.total;
-      if (delta > 1e-6) {
-        suggestions.push({
-          i, j, delta,
-          before: baseAnalysis.breakdown,
-          after: aft.breakdown,
-        });
-      }
-    }
-  }
-  suggestions.sort((a, b) => b.delta - a.delta);
-  return suggestions.slice(0, max);
-}
 
 // ---------- UI ----------
 
@@ -620,7 +513,7 @@ function fmtDate(d) {
 function fmtDateLong(d) {
   const wk = WEEKDAY[d.getDay()];
   const md = d.toLocaleString(undefined, { month: "short", day: "numeric" });
-  const time = formatTime24(`${pad2(d.getHours())}:${pad2(d.getMinutes())}`);
+  const time = formatTime24(`${pad2(d.getHours())}:${pad2(d.getMinutes())}`, state.timeFormat);
   return `${wk} ${md} · ${time}`;
 }
 
@@ -672,7 +565,7 @@ function renderSchedule() {
   mount(tb, rows.map(r => h("tr", null,
     h("td", { class: "num" }, r.idx + 1),
     h("td", null, fmtDate(r.g.date)),
-    h("td", null, formatSlotKey(r.g.slotKey)),
+    h("td", null, formatSlotKey(r.g.slotKey, state.timeFormat)),
     h("td", null, r.g.home),
     h("td", null, r.g.away),
     h("td", null, h("span", { class: `pill ${r.kind}` }, r.kind)),
@@ -810,7 +703,7 @@ function renderHomeAway(a) {
 function renderHeatmap(a) {
   const slots = a.slots;
   const isBucket = state.slotView === "buckets";
-  const label = (s) => isBucket ? BUCKET_LABEL[s] || s : formatSlotKey(s);
+  const label = (s) => isBucket ? BUCKET_LABEL[s] || s : formatSlotKey(s, state.timeFormat);
   const thead = h("thead", null, h("tr", null,
     h("th"),
     slots.map(s => h("th", null, label(s))),
@@ -1169,7 +1062,7 @@ $("paste-toggle").addEventListener("click", () => {
 
 $("paste-parse-btn").addEventListener("click", () => {
   const txt = $("paste-input").value;
-  const games = parsePastedText(txt);
+  const games = parsePastedText(txt, state.playoffCutoff);
   if (games.length === 0) {
     setStatus("Couldn't parse any games. Each game should be 3 lines: home/away (tab-separated), location, then date/time.", "error");
     return;
@@ -1215,8 +1108,8 @@ $("include-playoffs").addEventListener("change", (e) => {
 
 $("playoff-cutoff").addEventListener("change", (e) => {
   state.playoffCutoff = e.target.value || null;
-  applyPlayoffCutoff(state.games);
-  applyPlayoffCutoff(state.originalGames);
+  applyPlayoffCutoff(state.games, state.playoffCutoff);
+  applyPlayoffCutoff(state.originalGames, state.playoffCutoff);
   save();
   render();
 });

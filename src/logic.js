@@ -116,6 +116,107 @@ export function deserializeApplied(e) {
   };
 }
 
+export function formatTime24(t, timeFormat) {
+  if (timeFormat === "24h") return t;
+  const [hh, mm] = t.split(":").map(Number);
+  const ap = hh >= 12 ? "PM" : "AM";
+  const h12 = ((hh + 11) % 12) + 1;
+  return `${h12}:${pad2(mm)} ${ap}`;
+}
+
+export function formatSlotKey(slotKey, timeFormat) {
+  const sp = slotKey.indexOf(" ");
+  if (sp < 0) return slotKey;
+  return slotKey.slice(0, sp) + " " + formatTime24(slotKey.slice(sp + 1), timeFormat);
+}
+
+export function applyPlayoffCutoff(games, cutoff) {
+  const cutoffMs = cutoff ? new Date(cutoff).getTime() : null;
+  for (const g of games) {
+    const fromApi = g._apiPlayoff === true;
+    const fromCutoff = cutoffMs != null && g.date.getTime() >= cutoffMs;
+    g.isPlayoff = fromApi || fromCutoff;
+  }
+}
+
+export function finalizeGames(games, cutoff) {
+  games.sort((a, b) => a.date - b.date);
+  for (const g of games) {
+    g.slotKey = `${WEEKDAY[g.date.getDay()]} ${pad2(g.date.getHours())}:${pad2(g.date.getMinutes())}`;
+  }
+  applyPlayoffCutoff(games, cutoff);
+}
+
+export function parsePastedText(text, cutoff) {
+  const PAGINATION = /^\s*(«|»|…|\.\.\.|\d+\s*\(current\)|\d+)\s*$/;
+  const HEADER = /home\s*\t.*away/i;
+
+  const lines = text.split(/\r?\n/)
+    .map(s => s.trim())
+    .filter(s => s.length > 0)
+    .filter(s => !PAGINATION.test(s))
+    .filter(s => !HEADER.test(s));
+
+  const games = [];
+  for (let i = 0; i + 2 < lines.length; ) {
+    const teamLine = lines[i];
+    const locLine = lines[i + 1];
+    const dtLine = lines[i + 2];
+    const fields = teamLine.split(/\t+/).map(s => s.trim()).filter(Boolean);
+    const dt = parsePasteDate(dtLine);
+    if (fields.length >= 2 && !isNaN(dt)) {
+      games.push({
+        id: `paste-${games.length + 1}`,
+        date: dt,
+        home: fields[0],
+        away: fields[1],
+        location: locLine,
+        _apiPlayoff: false,
+        isPlayoff: false,
+        slotKey: null,
+      });
+      i += 3;
+    } else {
+      i += 1;
+    }
+  }
+  finalizeGames(games, cutoff);
+  return games;
+}
+
+export function swapCutoffDate(now = new Date()) {
+  const day = now.getDay();
+  const daysUntilNextMonday = day === 0 ? 1 : (8 - day);
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysUntilNextMonday + 7);
+}
+
+export function suggestSwaps(games, includePlayoffs, opts, max = 10) {
+  const baseAnalysis = analyze(games, includePlayoffs, opts);
+  const baseTotal = baseAnalysis.total;
+  const cutoffMs = opts.cutoffMs || 0;
+  const suggestions = [];
+  for (let i = 0; i < games.length; i++) {
+    if (games[i].date.getTime() < cutoffMs) continue;
+    for (let j = i + 1; j < games.length; j++) {
+      if (games[j].date.getTime() < cutoffMs) continue;
+      if (games[i].date.getTime() === games[j].date.getTime()) continue;
+      const swapped = swapDates(games, i, j);
+      if (hasTeamConflict(swapped)) continue;
+      const aft = analyze(swapped, includePlayoffs, opts);
+      const delta = baseTotal - aft.total;
+      if (delta > 1e-6) {
+        suggestions.push({
+          i, j, delta,
+          before: baseAnalysis.breakdown,
+          after: aft.breakdown,
+        });
+      }
+    }
+  }
+  suggestions.sort((a, b) => b.delta - a.delta);
+  return suggestions.slice(0, max);
+}
+
 export function analyze(games, includePlayoffs, opts = {}) {
   const useBuckets = opts.slotView === "buckets";
   const earlyEnd = opts.earlyEnd || "21:00";
