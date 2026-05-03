@@ -1,6 +1,10 @@
 # Project changelog
 
 ## 2026-05-02
+- Tuned penalty weights: home/away ×2 → ×1 (less critical for the D league),
+  Monday-share ×2 → ×3 (Monday avoidance matters more in practice).
+
+## 2026-05-02
 - Added head-to-head matchup matrix and Monday-games-per-team panels.
   Both feed into the penalty function (matchup variance ×3, Monday-share ×2).
 - Reworked swap suggestions: weekday-prefixed long dates, team color chips,

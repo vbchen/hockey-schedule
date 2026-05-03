@@ -265,7 +265,7 @@
     <details>
       <summary>About / how this works</summary>
       <p>Loads the schedule from DaySmart Recreation's public JSON:API (no login, no scraping). Stores in your browser's localStorage. Detects four issue classes and lets you simulate single-swap fixes that improve fairness.</p>
-      <p><strong>Issue weights</strong> (penalty function): game-count variance ×4, home/away imbalance ×2, slot-distribution variance ×1, Monday-share variance ×2 (Mondays are treated as less-desirable than other nights), head-to-head matchup variance ×3, same-matchup back-to-back ×8.</p>
+      <p><strong>Issue weights</strong> (penalty function): game-count variance ×4, home/away imbalance ×1, slot-distribution variance ×1, Monday-share variance ×3 (Mondays are treated as less-desirable than other nights), head-to-head matchup variance ×3, same-matchup back-to-back ×8.</p>
       <p><strong>Caveats:</strong> A date-swap can't fix uneven game counts, home/away imbalance, or head-to-head matchup counts — those depend on the matchup list itself, not when games are scheduled. The swap engine still suggests fixes for slot fairness and back-to-back issues.</p>
     </details>
   </div>
@@ -282,11 +282,11 @@ const API_BASE = "https://api.daysmartrecreation.com/v1";
 const FREE_AGENT_PREFIX = "*";
 
 const W_GAMECOUNT = 4;
-const W_HOMEAWAY = 2;
+const W_HOMEAWAY = 1;
 const W_SLOT = 1;
 const W_B2B = 8;
 const W_MATCHUP = 3;
-const W_MONDAY = 2;
+const W_MONDAY = 3;
 
 // Team colors → background; pick text color for contrast.
 const TEAM_STYLE = {
