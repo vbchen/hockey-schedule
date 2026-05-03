@@ -116,6 +116,18 @@ export function deserializeApplied(e) {
   };
 }
 
+export function parseInputRef(s, defaultCompany) {
+  s = (s || "").trim();
+  if (!s) return null;
+  let m = s.match(/online\/([a-z0-9_-]+)\/leagues\/(\d+)/i);
+  if (m) return { company: m[1], leagueId: m[2] };
+  m = s.match(/^([a-z0-9_-]+)[\/\s,]+(\d+)$/i);
+  if (m) return { company: m[1], leagueId: m[2] };
+  m = s.match(/^(\d+)$/);
+  if (m && defaultCompany) return { company: defaultCompany, leagueId: m[1] };
+  return null;
+}
+
 export function formatTime24(t, timeFormat) {
   if (timeFormat === "24h") return t;
   const [hh, mm] = t.split(":").map(Number);

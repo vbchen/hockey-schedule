@@ -1,6 +1,13 @@
 # Project changelog
 
 ## 2026-05-03
+- Extracted `parseInputRef` into `src/logic.js` (now takes `defaultCompany`
+  as an explicit parameter instead of reading `state.source?.company`).
+  Added Playwright coverage for the swap apply/undo flow. Scoped Vitest
+  to `tests/**/*.test.js` via `vitest.config.js` so it no longer tries
+  to collect Playwright specs. Test counts: vitest 60 → 69, Playwright 7 → 9.
+
+## 2026-05-03
 - Added a thin Playwright smoke-test layer (`e2e/smoke.spec.js`, 7 tests,
   ~2s headless Chromium) to catch UI regressions that unit tests can't —
   mainly "did a panel disappear?" Driven through the paste-import path

@@ -79,3 +79,27 @@ test("changing time format updates the schedule slot column", async ({ page }) =
   await expect(firstSlotCell).toContainText("19:30");
   await expect(firstSlotCell).not.toContainText(/PM|AM/);
 });
+
+test("applying a swap surfaces an Applied card with an Undo button", async ({ page }) => {
+  await loadFixture(page);
+  const applyBtn = page.locator("#swap-list .swap-card button.primary").first();
+  await expect(applyBtn).toBeVisible();
+  await applyBtn.click();
+
+  const appliedCard = page.locator("#swap-list .swap-card--applied");
+  await expect(appliedCard).toBeVisible();
+  await expect(appliedCard.locator(".applied-badge")).toHaveText("Applied");
+  await expect(appliedCard.locator("button.ghost")).toContainText("Undo");
+});
+
+test("undoing an applied swap removes the Applied card", async ({ page }) => {
+  await loadFixture(page);
+  await page.locator("#swap-list .swap-card button.primary").first().click();
+  const appliedCard = page.locator("#swap-list .swap-card--applied");
+  await expect(appliedCard).toBeVisible();
+
+  await appliedCard.locator("button.ghost").click();
+  await expect(page.locator("#swap-list .swap-card--applied")).toHaveCount(0);
+  // A regular swap suggestion should still be present.
+  await expect(page.locator("#swap-list .swap-card button.primary").first()).toBeVisible();
+});

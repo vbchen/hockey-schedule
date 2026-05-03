@@ -334,6 +334,7 @@ import {
   parsePastedText,
   swapCutoffDate,
   suggestSwaps,
+  parseInputRef,
 } from "./src/logic.js";
 
 // ---------- Constants ----------
@@ -427,18 +428,6 @@ function load() {
 }
 
 // ---------- URL parsing ----------
-
-function parseInputRef(s) {
-  s = (s || "").trim();
-  if (!s) return null;
-  let m = s.match(/online\/([a-z0-9_-]+)\/leagues\/(\d+)/i);
-  if (m) return { company: m[1], leagueId: m[2] };
-  m = s.match(/^([a-z0-9_-]+)[\/\s,]+(\d+)$/i);
-  if (m) return { company: m[1], leagueId: m[2] };
-  m = s.match(/^(\d+)$/);
-  if (m && state.source?.company) return { company: state.source.company, leagueId: m[1] };
-  return null;
-}
 
 // ---------- API loader ----------
 
@@ -1031,7 +1020,7 @@ function undoSwap(aId, bId) {
 // ---------- Wiring ----------
 
 $("load-btn").addEventListener("click", async () => {
-  const ref = parseInputRef($("url-input").value);
+  const ref = parseInputRef($("url-input").value, state.source?.company);
   if (!ref) {
     setStatus("Couldn't recognize the URL. Try the full DaySmart league URL or 'company/leagueId'.", "error");
     return;

@@ -24,6 +24,7 @@ import {
   parsePastedText,
   swapCutoffDate,
   suggestSwaps,
+  parseInputRef,
 } from "../src/logic.js";
 
 function game(id, home, away, date, { isPlayoff = false, location = "Rink 1" } = {}) {
@@ -548,5 +549,42 @@ describe("suggestSwaps", () => {
     ];
     const out = suggestSwaps(games, false, {}, 2);
     expect(out.length).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("parseInputRef", () => {
+  it("parses a full DaySmart league URL", () => {
+    expect(parseInputRef("https://app.daysmartrecreation.com/dash/online/tahl/leagues/12345"))
+      .toEqual({ company: "tahl", leagueId: "12345" });
+  });
+  it("parses a slash-form 'company/id'", () => {
+    expect(parseInputRef("tahl/12345")).toEqual({ company: "tahl", leagueId: "12345" });
+  });
+  it("parses a comma-form 'company,id'", () => {
+    expect(parseInputRef("tahl,12345")).toEqual({ company: "tahl", leagueId: "12345" });
+  });
+  it("parses a space-form 'company id'", () => {
+    expect(parseInputRef("tahl 12345")).toEqual({ company: "tahl", leagueId: "12345" });
+  });
+  it("uses defaultCompany for a bare league id", () => {
+    expect(parseInputRef("12345", "tahl")).toEqual({ company: "tahl", leagueId: "12345" });
+  });
+  it("returns null for a bare id without defaultCompany", () => {
+    expect(parseInputRef("12345")).toBeNull();
+    expect(parseInputRef("12345", null)).toBeNull();
+    expect(parseInputRef("12345", "")).toBeNull();
+  });
+  it("returns null for empty / whitespace / null input", () => {
+    expect(parseInputRef("")).toBeNull();
+    expect(parseInputRef("   ")).toBeNull();
+    expect(parseInputRef(null)).toBeNull();
+    expect(parseInputRef(undefined)).toBeNull();
+  });
+  it("returns null for unrecognized input", () => {
+    expect(parseInputRef("not a url")).toBeNull();
+    expect(parseInputRef("hello world")).toBeNull();
+  });
+  it("trims surrounding whitespace", () => {
+    expect(parseInputRef("  tahl/12345  ")).toEqual({ company: "tahl", leagueId: "12345" });
   });
 });
