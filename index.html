@@ -285,7 +285,7 @@ let state = {
   playoffCutoff: null,   // YYYY-MM-DD; games on/after this date are playoffs
   slotView: "buckets",   // "exact" | "buckets"
   earlyEnd: "21:00",     // games starting before this = early
-  lateStart: "22:30",    // games starting at/after this = late
+  lateStart: "22:00",    // games starting at/after this = late
   sortKey: "date",
   sortAsc: true,
 };
@@ -489,7 +489,7 @@ function bucketOf(slotKey, earlyEnd, lateStart) {
 function analyze(games, includePlayoffs, opts = {}) {
   const useBuckets = opts.slotView === "buckets";
   const earlyEnd = opts.earlyEnd || "21:00";
-  const lateStart = opts.lateStart || "22:30";
+  const lateStart = opts.lateStart || "22:00";
 
   const fair = includePlayoffs ? games : games.filter(g => !g.isPlayoff);
   const teams = uniqueTeams(games);
