@@ -79,6 +79,28 @@
   .cal-game .time { padding: 2px 4px; background: rgba(255,255,255,0.06); color: var(--text-dim); font-variant-numeric: tabular-nums; width: 48px; flex: 0 0 48px; text-align: center; }
   .cal-game .half { flex: 1; padding: 2px 4px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
   .cal-game .vs { padding: 2px; color: var(--text-dim); font-size: 9px; align-self: center; }
+  .cal-game--swapped {
+    outline: 2px dashed var(--good);
+    outline-offset: -1px;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.3) inset;
+  }
+  .cal-game--swapped .swap-marker {
+    flex: 0 0 auto;
+    padding: 2px 4px;
+    background: var(--good);
+    color: #06180c;
+    font-weight: 800;
+    font-size: 11px;
+    line-height: 1.1;
+    display: flex;
+    align-items: center;
+  }
+  .legend-swap-marker {
+    background: transparent;
+    border: 2px dashed var(--good);
+    width: 14px; height: 14px; border-radius: 3px;
+    box-sizing: border-box;
+  }
   .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
   .legend-item { display: flex; align-items: center; gap: 5px; font-size: 12px; }
   .legend-swatch { width: 14px; height: 14px; border-radius: 3px; }
@@ -119,9 +141,21 @@
   .swap-card .preview-row.faded { opacity: 0.5; }
   .swap-card .preview-tag { color: var(--text-dim); font-size: 10px; min-width: 38px; text-transform: uppercase; letter-spacing: .04em; }
   .swap-card .delta { color: var(--good); font-weight: 700; font-size: 16px; font-variant-numeric: tabular-nums; }
+  .swap-card .delta.delta-applied { color: var(--text-dim); }
   .swap-card .breakdown { font-size: 11.5px; color: var(--text-dim); margin-top: 10px; }
   .swap-card .breakdown .changed-good { color: var(--good); font-weight: 600; }
   .swap-card .breakdown .changed-bad { color: var(--warn); font-weight: 600; }
+  .swap-card.swap-card--applied {
+    background: #16281c;
+    border-color: #2d5a3d;
+    border-left: 3px solid var(--good);
+  }
+  .swap-card.swap-card--applied:hover { border-color: var(--good); }
+  .swap-card .applied-badge {
+    display: inline-block; padding: 1px 7px; border-radius: 3px;
+    background: var(--good); color: #06180c; font-size: 10.5px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em; vertical-align: 1px;
+  }
   .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
   .footnote { color: var(--text-dim); font-size: 12px; margin-top: 8px; }
   details > summary { cursor: pointer; color: var(--text-dim); padding: 4px 0; }
@@ -265,7 +299,7 @@
     <details>
       <summary>About / how this works</summary>
       <p>Loads the schedule from DaySmart Recreation's public JSON:API (no login, no scraping). Stores in your browser's localStorage. Detects four issue classes and lets you simulate single-swap fixes that improve fairness.</p>
-      <p><strong>Issue weights</strong> (penalty function): game-count variance ×4, home/away imbalance ×1, slot-distribution variance ×1, Monday-share variance ×3 (Mondays are treated as less-desirable than other nights), head-to-head matchup variance ×3, same-matchup back-to-back ×8.</p>
+      <p><strong>Issue weights</strong> (penalty function): game-count variance ×4, home/away imbalance ×1, slot-distribution variance ×1, Monday-share variance ×3 (Mondays are treated as less-desirable than other nights), games-per-team-per-week deviation from 1 ×3 (penalizes 2+ games in a week), head-to-head matchup variance ×3, same-matchup back-to-back ×8. Swaps that put a team in two games on the same calendar day are rejected outright.</p>
       <p><strong>Caveats:</strong> A date-swap can't fix uneven game counts, home/away imbalance, or head-to-head matchup counts — those depend on the matchup list itself, not when games are scheduled. The swap engine still suggests fixes for slot fairness and back-to-back issues.</p>
     </details>
   </div>
@@ -287,6 +321,7 @@ const W_SLOT = 1;
 const W_B2B = 8;
 const W_MATCHUP = 3;
 const W_MONDAY = 3;
+const W_WEEK = 3;
 
 // Team colors → background; pick text color for contrast.
 const TEAM_STYLE = {
@@ -351,6 +386,7 @@ function save() {
     ...state,
     games: state.games.map(serializeGame),
     originalGames: state.originalGames.map(serializeGame),
+    swapsApplied: (state.swapsApplied || []).map(serializeApplied),
   };
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch (e) {}
 }
@@ -365,6 +401,7 @@ function load() {
       ...p,
       games: (p.games || []).map(deserializeGame),
       originalGames: (p.originalGames || []).map(deserializeGame),
+      swapsApplied: (p.swapsApplied || []).map(deserializeApplied),
     };
     return true;
   } catch (e) { return false; }
@@ -375,6 +412,23 @@ function serializeGame(g) {
 }
 function deserializeGame(g) {
   return { ...g, date: new Date(g.date) };
+}
+
+function serializeApplied(e) {
+  if (!e.gameA || !e.gameB) return e; // legacy { aId, bId } only
+  return {
+    ...e,
+    gameA: { ...e.gameA, date: e.gameA.date instanceof Date ? e.gameA.date.toISOString() : e.gameA.date },
+    gameB: { ...e.gameB, date: e.gameB.date instanceof Date ? e.gameB.date.toISOString() : e.gameB.date },
+  };
+}
+function deserializeApplied(e) {
+  if (!e || !e.gameA || !e.gameB) return e;
+  return {
+    ...e,
+    gameA: { ...e.gameA, date: new Date(e.gameA.date) },
+    gameB: { ...e.gameB, date: new Date(e.gameB.date) },
+  };
 }
 
 // ---------- URL parsing ----------
@@ -617,6 +671,28 @@ function analyze(games, includePlayoffs, opts = {}) {
     mondayPenalty += (mondayCount[t] - mondayExpected) ** 2;
   }
 
+  // Games per team per Mon–Sun week. Target = 1 per team per active week;
+  // squared deviation strongly punishes 2+ in a week (4, 9, ...) while
+  // gently discouraging idle weeks (1).
+  const weekTeamCount = {};
+  const weeksSeen = new Set();
+  const teamSet = new Set(teams);
+  for (const g of fair) {
+    const wk = weekKey(g.date);
+    weeksSeen.add(wk);
+    if (!weekTeamCount[wk]) weekTeamCount[wk] = {};
+    if (teamSet.has(g.home)) weekTeamCount[wk][g.home] = (weekTeamCount[wk][g.home] || 0) + 1;
+    if (teamSet.has(g.away)) weekTeamCount[wk][g.away] = (weekTeamCount[wk][g.away] || 0) + 1;
+  }
+  let weekPenalty = 0;
+  for (const wk of weeksSeen) {
+    const counts = weekTeamCount[wk] || {};
+    for (const t of teams) {
+      const c = counts[t] || 0;
+      weekPenalty += (c - 1) ** 2;
+    }
+  }
+
   const matchups = {};
   for (const t of teams) matchups[t] = Object.fromEntries(teams.map(o => [o, 0]));
   for (const g of fair) {
@@ -660,7 +736,8 @@ function analyze(games, includePlayoffs, opts = {}) {
     W_SLOT * slotPenalty +
     W_B2B * b2bPenalty +
     W_MATCHUP * matchupPenalty +
-    W_MONDAY * mondayPenalty;
+    W_MONDAY * mondayPenalty +
+    W_WEEK * weekPenalty;
 
   return {
     teams, slots, gameCount, median,
@@ -676,6 +753,7 @@ function analyze(games, includePlayoffs, opts = {}) {
       b2b: W_B2B * b2bPenalty,
       matchup: W_MATCHUP * matchupPenalty,
       monday: W_MONDAY * mondayPenalty,
+      week: W_WEEK * weekPenalty,
     },
     total,
   };
@@ -695,6 +773,15 @@ function slotCmp(a, b) {
 }
 
 // ---------- Swap engine ----------
+
+function weekKey(date) {
+  // Mon-anchored week: returns YYYY-MM-DD of that week's Monday, local time.
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dow = d.getDay(); // 0=Sun..6=Sat
+  const offset = dow === 0 ? -6 : 1 - dow;
+  d.setDate(d.getDate() + offset);
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
 
 function swapCutoffDate() {
   // Start of the Monday after next, local time. Past games plus the current
@@ -741,15 +828,17 @@ function swapDates(games, i, j) {
 }
 
 function hasTeamConflict(games) {
-  const byTime = {};
+  // Reject any team appearing twice on the same calendar day, not just the
+  // same instant. Same-time double-up was a special case of this.
+  const byDay = {};
   for (const g of games) {
-    const t = g.date.getTime();
-    if (!byTime[t]) byTime[t] = [];
-    byTime[t].push(g);
+    const k = g.date.toDateString();
+    if (!byDay[k]) byDay[k] = [];
+    byDay[k].push(g);
   }
-  for (const t of Object.keys(byTime)) {
+  for (const k of Object.keys(byDay)) {
     const teams = [];
-    for (const g of byTime[t]) { teams.push(g.home, g.away); }
+    for (const g of byDay[k]) { teams.push(g.home, g.away); }
     if (new Set(teams).size !== teams.length) return true;
   }
   return false;
@@ -794,7 +883,7 @@ function render() {
   const analysis = analyze(state.games, state.includePlayoffs, opts);
   $("penalty-summary").textContent =
     `Penalty: ${analysis.total.toFixed(1)}   ` +
-    `(games ${analysis.breakdown.gameCount.toFixed(1)} · h/a ${analysis.breakdown.homeAway.toFixed(1)} · slots ${analysis.breakdown.slot.toFixed(1)} · mondays ${analysis.breakdown.monday.toFixed(1)} · matchups ${analysis.breakdown.matchup.toFixed(1)} · b2b ${analysis.breakdown.b2b.toFixed(1)})`;
+    `(games ${analysis.breakdown.gameCount.toFixed(1)} · h/a ${analysis.breakdown.homeAway.toFixed(1)} · slots ${analysis.breakdown.slot.toFixed(1)} · mondays ${analysis.breakdown.monday.toFixed(1)} · weeks ${analysis.breakdown.week.toFixed(1)} · matchups ${analysis.breakdown.matchup.toFixed(1)} · b2b ${analysis.breakdown.b2b.toFixed(1)})`;
 
   renderSchedule();
   renderCalendar();
@@ -840,7 +929,19 @@ function renderCalendar() {
       h("span", null, t),
     );
   });
+  if (state.swapsApplied && state.swapsApplied.length) {
+    legendItems.push(h("div", { class: "legend-item" },
+      h("div", { class: "legend-swatch legend-swap-marker" }),
+      h("span", null, "moved by applied swap"),
+    ));
+  }
   mount($("cal-legend"), legendItems);
+
+  const swappedIds = new Set();
+  for (const e of (state.swapsApplied || [])) {
+    if (e.aId) swappedIds.add(e.aId);
+    if (e.bId) swappedIds.add(e.bId);
+  }
 
   // Group games by month
   const byMonth = new Map();  // "YYYY-MM" -> [games]
@@ -880,7 +981,15 @@ function renderCalendar() {
         const time = state.timeFormat === "24h"
           ? `${pad2(hh)}:${pad2(mm)}`
           : `${((hh + 11) % 12 + 1)}:${pad2(mm)}${hh >= 12 ? "p" : "a"}`;
-        cellChildren.push(h("div", { class: "cal-game", title: `${g.home} (home) vs ${g.away} (away) — ${fmtDateLong(g.date)}` },
+        const isSwapped = swappedIds.has(g.id);
+        const titleText = `${g.home} (home) vs ${g.away} (away) — ${fmtDateLong(g.date)}` +
+          (isSwapped ? " — moved by applied swap" : "");
+        cellChildren.push(h("div", {
+          class: "cal-game" + (isSwapped ? " cal-game--swapped" : ""),
+          "data-game-id": g.id,
+          title: titleText,
+        },
+          isSwapped ? h("div", { class: "swap-marker", "aria-hidden": "true" }, "↻") : null,
           h("div", { class: "time" }, time),
           h("div", { class: "half", style: { background: sh.bg, color: sh.fg } }, sh.abbr),
           h("div", { class: "half", style: { background: sa.bg, color: sa.fg } }, sa.abbr),
@@ -1081,6 +1190,7 @@ function breakdownNode(before, after) {
     ["h/a",      "homeAway"],
     ["slots",    "slot"],
     ["mondays",  "monday"],
+    ["weeks",    "week"],
     ["matchups", "matchup"],
     ["b2b",      "b2b"],
   ];
@@ -1099,8 +1209,29 @@ function breakdownNode(before, after) {
   return h("div", { class: "breakdown" }, ...parts);
 }
 
-function buildSwapCard(s, n) {
-  const ga = state.games[s.i], gb = state.games[s.j];
+function buildSwapCard(s, n, opts = {}) {
+  const applied = !!opts.applied;
+  // Resolve the two games' display data. For live suggestions we read the
+  // current state; for applied swaps we use the pre-swap snapshot stored
+  // when the swap was applied (state.games now holds the post-swap dates,
+  // so reading from there would mislabel the from→to slots).
+  const ga = applied ? s.gameA : state.games[s.i];
+  const gb = applied ? s.gameB : state.games[s.j];
+  if (!ga || !gb) {
+    // Legacy applied entry (pre-snapshot schema): render a skinny placeholder
+    // with just an Undo button.
+    return h("div", { class: "swap-card swap-card--applied" },
+      h("div", { class: "swap-main" },
+        h("div", { class: "swap-header" },
+          h("span", { class: "applied-badge" }, "Applied"), " ",
+          h("span", { class: "muted" }, "Swap (no preview available)"),
+        ),
+      ),
+      h("div", { class: "swap-side" },
+        h("button", { class: "ghost", onclick: () => undoSwap(s.aId, s.bId) }, "↺ Undo"),
+      ),
+    );
+  }
   const aDate = fmtDateLong(ga.date);
   const bDate = fmtDateLong(gb.date);
 
@@ -1136,22 +1267,30 @@ function buildSwapCard(s, n) {
     previewCell(bDate, gb, ga),
   );
 
-  const card = h("div", { class: "swap-card" },
-    h("div", { class: "swap-main" },
-      h("div", { class: "swap-header" },
+  const header = applied
+    ? h("div", { class: "swap-header" },
+        h("span", { class: "applied-badge" }, "Applied"), " ",
+        h("span", { class: "muted" }, "These two games were swapped"),
+      )
+    : h("div", { class: "swap-header" },
         h("strong", null, `${n + 1}.`), " ",
         h("span", { class: "muted" }, "Swap these two games"),
-      ),
+      );
+
+  const actionBtn = applied
+    ? h("button", { class: "ghost", onclick: () => undoSwap(s.aId, s.bId) }, "↺ Undo")
+    : h("button", { class: "primary", onclick: () => applySwap(s.i, s.j) }, "Apply");
+
+  const card = h("div", { class: applied ? "swap-card swap-card--applied" : "swap-card" },
+    h("div", { class: "swap-main" },
+      header,
       moves,
       preview,
       breakdownNode(s.before, s.after),
     ),
     h("div", { class: "swap-side" },
-      h("div", { class: "delta" }, `−${s.delta.toFixed(2)}`),
-      h("button", {
-        class: "primary",
-        onclick: () => applySwap(s.i, s.j),
-      }, "Apply"),
+      h("div", { class: applied ? "delta delta-applied" : "delta" }, `−${s.delta.toFixed(2)}`),
+      actionBtn,
     ),
   );
 
@@ -1169,27 +1308,76 @@ function renderSwaps(analysis) {
       style: { fontSize: "12px", marginBottom: "10px" },
     }, `Excluding games before ${cutoffStr} — this week and next are treated as locked in.`);
 
+    // Applied swaps render at the top, newest-first (read like a stack).
+    const appliedCards = (state.swapsApplied || []).slice().reverse()
+      .map((e, n) => buildSwapCard(e, n, { applied: true }));
+
     const opts = {
       slotView: state.slotView, earlyEnd: state.earlyEnd, lateStart: state.lateStart,
       cutoffMs: cutoff.getTime(),
     };
     const sugg = suggestSwaps(state.games, state.includePlayoffs, opts, 10);
+
+    const liveHeader = appliedCards.length && sugg.length
+      ? h("div", { class: "muted", style: { fontSize: "12px", margin: "14px 0 6px" } },
+          "More suggestions:")
+      : null;
+
     if (sugg.length === 0) {
-      mount(list, cutoffNote, h("div", { class: "muted" },
+      const emptyMsg = h("div", { class: "muted" },
         analysis.total === 0
           ? "Schedule is already balanced."
-          : "No improving single swaps found among remaining games. Remaining penalty may need a matchup change."));
+          : "No further improving single swaps found among remaining games. Remaining penalty may need a matchup change.");
+      mount(list, cutoffNote, ...appliedCards, emptyMsg);
       return;
     }
-    mount(list, cutoffNote, ...sugg.map((s, n) => buildSwapCard(s, n)));
+    mount(list, cutoffNote, ...appliedCards, liveHeader, ...sugg.map((s, n) => buildSwapCard(s, n)));
   });
 }
 
 function applySwap(i, j) {
-  state.games = swapDates(state.games, i, j);
-  state.swapsApplied.push({ aId: state.games[i].id, bId: state.games[j].id });
+  // Snapshot pre-swap game data so the applied card keeps showing the right
+  // from→to slots even after state.games has the swap in it.
+  const ga = state.games[i], gb = state.games[j];
+  const opts = { slotView: state.slotView, earlyEnd: state.earlyEnd, lateStart: state.lateStart };
+  const before = analyze(state.games, state.includePlayoffs, opts).breakdown;
+  const swapped = swapDates(state.games, i, j);
+  const after = analyze(swapped, state.includePlayoffs, opts).breakdown;
+  const delta = sumBreakdown(before) - sumBreakdown(after);
+  state.games = swapped;
+  state.swapsApplied.push({
+    aId: ga.id,
+    bId: gb.id,
+    delta,
+    before,
+    after,
+    gameA: { id: ga.id, home: ga.home, away: ga.away, date: new Date(ga.date) },
+    gameB: { id: gb.id, home: gb.home, away: gb.away, date: new Date(gb.date) },
+  });
   save();
   setStatus(`Applied swap G${i+1} ↔ G${j+1}.`);
+  render();
+}
+
+function sumBreakdown(b) {
+  return (b.gameCount || 0) + (b.homeAway || 0) + (b.slot || 0)
+    + (b.b2b || 0) + (b.matchup || 0) + (b.monday || 0) + (b.week || 0);
+}
+
+function undoSwap(aId, bId) {
+  const i = state.games.findIndex(g => g.id === aId);
+  const j = state.games.findIndex(g => g.id === bId);
+  if (i < 0 || j < 0) {
+    // Game ids no longer present (schedule reloaded). Drop the entry only.
+    state.swapsApplied = state.swapsApplied.filter(e => !(e.aId === aId && e.bId === bId));
+    save();
+    render();
+    return;
+  }
+  state.games = swapDates(state.games, i, j);
+  state.swapsApplied = state.swapsApplied.filter(e => !(e.aId === aId && e.bId === bId));
+  save();
+  setStatus("Undid swap.");
   render();
 }
 

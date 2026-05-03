@@ -1,5 +1,14 @@
 # Project changelog
 
+## 2026-05-03
+- Swap engine: reject any swap that puts a team in two games on the same
+  calendar day (was previously only checking same exact timestamp). Added
+  W_WEEK ×3 penalty term (squared deviation from 1 game/team/week) to
+  prefer one-per-week schedules.
+- Swap UI: applied swaps stay visible at the top of the list with a green
+  "Applied" badge and per-swap Undo button. Moved games are highlighted on
+  the calendar with a green dashed border and a ↻ glyph.
+
 ## 2026-05-02
 - Tuned penalty weights: home/away ×2 → ×1 (less critical for the D league),
   Monday-share ×2 → ×3 (Monday avoidance matters more in practice).
