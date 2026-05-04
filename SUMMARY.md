@@ -1,6 +1,14 @@
 # Project changelog
 
 ## 2026-05-04
+- Expanded `usHolidays` to year-round coverage (12 → 19 entries). Added
+  Memorial Day (last Mon of May), Juneteenth, Independence Day,
+  Valentine's Day, St. Patrick's Day, Mother's Day, Father's Day, and
+  Easter via the Anonymous Gregorian Computus — all algorithmic, no new
+  deps. Sunday holidays matter for leagues that play Sundays. Test
+  count: vitest 94 → 96.
+
+## 2026-05-04
 - Auto-load the D league (`ocsportsplex/4356`) on first visit when there's
   no cached data, so a fresh page no longer requires pasting the URL.
   Clear button still wipes to an empty state for analyzing other leagues.

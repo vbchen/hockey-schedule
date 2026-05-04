@@ -838,6 +838,53 @@ describe("usHolidays", () => {
     expect(veterans.date.getMonth()).toBe(10);
     const xmas = h.find(d => d.name === "Christmas Day");
     expect(xmas.date.getDate()).toBe(25);
+    const juneteenth = h.find(d => d.name === "Juneteenth");
+    expect(juneteenth.date.getMonth()).toBe(5);
+    expect(juneteenth.date.getDate()).toBe(19);
+    const july4 = h.find(d => d.name === "Independence Day");
+    expect(july4.date.getMonth()).toBe(6);
+    expect(july4.date.getDate()).toBe(4);
+  });
+
+  it("computes Easter via Computus (spot-check known dates)", () => {
+    // Reference values from the US Naval Observatory / standard tables.
+    const cases = [
+      { year: 2024, month: 2, day: 31 }, // 2024-03-31
+      { year: 2025, month: 3, day: 20 }, // 2025-04-20
+      { year: 2026, month: 3, day: 5 },  // 2026-04-05
+      { year: 2027, month: 2, day: 28 }, // 2027-03-28
+      { year: 2030, month: 3, day: 21 }, // 2030-04-21
+    ];
+    for (const { year, month, day } of cases) {
+      const easter = usHolidays(year).find(d => d.name === "Easter");
+      expect(easter.date.getMonth()).toBe(month);
+      expect(easter.date.getDate()).toBe(day);
+      expect(easter.date.getDay()).toBe(0); // always Sunday
+    }
+  });
+
+  it("computes Mother's Day and Father's Day as Sundays", () => {
+    const h = usHolidays(2026);
+    const mom = h.find(d => d.name === "Mother's Day");
+    expect(mom.date.getMonth()).toBe(4);
+    expect(mom.date.getDate()).toBe(10); // 2nd Sun of May 2026
+    expect(mom.date.getDay()).toBe(0);
+    const dad = h.find(d => d.name === "Father's Day");
+    expect(dad.date.getMonth()).toBe(5);
+    expect(dad.date.getDate()).toBe(21); // 3rd Sun of Jun 2026
+    expect(dad.date.getDay()).toBe(0);
+  });
+
+  it("computes Memorial Day as the last Monday of May", () => {
+    // 2026-05-25 is a Monday and the last Monday of May 2026.
+    const h2026 = usHolidays(2026).find(d => d.name === "Memorial Day");
+    expect(h2026.date.getMonth()).toBe(4);
+    expect(h2026.date.getDate()).toBe(25);
+    expect(h2026.date.getDay()).toBe(1);
+    // 2027-05-31 is itself a Monday — last-Monday math must include May 31.
+    const h2027 = usHolidays(2027).find(d => d.name === "Memorial Day");
+    expect(h2027.date.getDate()).toBe(31);
+    expect(h2027.date.getDay()).toBe(1);
   });
 });
 

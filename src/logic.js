@@ -235,7 +235,25 @@ export function usHolidays(year) {
     const offset = (weekday - first.getDay() + 7) % 7;
     return new Date(year, month, 1 + offset + (n - 1) * 7);
   }
+  // Last Monday of May: walk back from May 31 to the nearest Monday.
+  const may31 = new Date(year, 4, 31);
+  const memorial = new Date(year, 4, 31 - ((may31.getDay() + 6) % 7));
   const thx = nthDayOfMonth(10, 4, 4);
+  // Easter Sunday via the Anonymous Gregorian Computus.
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const hh = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - hh - k) % 7;
+  const m = Math.floor((a + 11 * hh + 22 * l) / 451);
+  const easterMonth = Math.floor((hh + l - 7 * m + 114) / 31) - 1;
+  const easterDay = ((hh + l - 7 * m + 114) % 31) + 1;
   return [
     { date: nthDayOfMonth(8, 1, 1), name: "Labor Day" },
     { date: nthDayOfMonth(9, 1, 2), name: "Indigenous Peoples' Day" },
@@ -248,7 +266,15 @@ export function usHolidays(year) {
     { date: new Date(year, 11, 31), name: "New Year's Eve" },
     { date: new Date(year, 0, 1), name: "New Year's Day" },
     { date: nthDayOfMonth(0, 1, 3), name: "MLK Day" },
+    { date: new Date(year, 1, 14), name: "Valentine's Day" },
     { date: nthDayOfMonth(1, 1, 3), name: "Presidents' Day" },
+    { date: new Date(year, 2, 17), name: "St. Patrick's Day" },
+    { date: new Date(year, easterMonth, easterDay), name: "Easter" },
+    { date: nthDayOfMonth(4, 0, 2), name: "Mother's Day" },
+    { date: memorial, name: "Memorial Day" },
+    { date: nthDayOfMonth(5, 0, 3), name: "Father's Day" },
+    { date: new Date(year, 5, 19), name: "Juneteenth" },
+    { date: new Date(year, 6, 4), name: "Independence Day" },
   ];
 }
 
