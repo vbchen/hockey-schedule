@@ -1,6 +1,14 @@
 # Project changelog
 
 ## 2026-05-04
+- Added a strict Content-Security-Policy meta tag: `default-src 'none'`,
+  `script-src 'self'`, `style-src 'self' 'unsafe-inline'` (existing
+  `<style>` block), `connect-src https://api.daysmartrecreation.com`,
+  `base-uri 'none'`, `form-action 'none'`. Required extracting the inline
+  `<script type="module">` body (~1150 lines) out to `src/app.js` since
+  CSP blocks inline scripts.
+
+## 2026-05-04
 - Expanded `usHolidays` to year-round coverage (12 → 19 entries). Added
   Memorial Day (last Mon of May), Juneteenth, Independence Day,
   Valentine's Day, St. Patrick's Day, Mother's Day, Father's Day, and
