@@ -445,6 +445,7 @@ import {
 const STORAGE_KEY = "hockey-schedule-v1";
 const API_BASE = "https://api.daysmartrecreation.com/v1";
 const FREE_AGENT_PREFIX = "*";
+const DEFAULT_LEAGUE_REF = "ocsportsplex/4356"; // D league — auto-loaded when no cached data
 
 // Team colors → background; pick text color for contrast.
 const TEAM_STYLE = {
@@ -1371,12 +1372,7 @@ function onGenerate() {
 
 // ---------- Wiring ----------
 
-$("load-btn").addEventListener("click", async () => {
-  const ref = parseInputRef($("url-input").value, state.source?.company);
-  if (!ref) {
-    setStatus("Couldn't recognize the URL. Try the full DaySmart league URL or 'company/leagueId'.", "error");
-    return;
-  }
+async function loadLeagueByRef(ref) {
   setStatus("Loading from DaySmart…");
   try {
     const { league, teams, games } = await fetchLeague(ref.company, ref.leagueId);
@@ -1390,10 +1386,21 @@ $("load-btn").addEventListener("click", async () => {
     save();
     setStatus(`Loaded ${games.length} games from ${league.name}.`);
     render();
+    return true;
   } catch (e) {
     console.error(e);
     setStatus(`Load failed: ${e.message}. If the league is public this may be a CORS/network issue — try Paste mode.`, "error");
+    return false;
   }
+}
+
+$("load-btn").addEventListener("click", async () => {
+  const ref = parseInputRef($("url-input").value, state.source?.company);
+  if (!ref) {
+    setStatus("Couldn't recognize the URL. Try the full DaySmart league URL or 'company/leagueId'.", "error");
+    return;
+  }
+  await loadLeagueByRef(ref);
 });
 
 $("paste-toggle").addEventListener("click", () => {
@@ -1544,6 +1551,9 @@ if (load()) {
   }
 } else {
   setMode("analyze");
+  $("url-input").value = DEFAULT_LEAGUE_REF;
+  const defaultRef = parseInputRef(DEFAULT_LEAGUE_REF);
+  if (defaultRef) loadLeagueByRef(defaultRef);
 }
 </script>
 </body>

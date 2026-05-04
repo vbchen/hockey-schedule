@@ -1,5 +1,10 @@
 # Project changelog
 
+## 2026-05-04
+- Auto-load the D league (`ocsportsplex/4356`) on first visit when there's
+  no cached data, so a fresh page no longer requires pasting the URL.
+  Clear button still wipes to an empty state for analyzing other leagues.
+
 ## 2026-05-03
 - Plan-mode polish: renamed the games-per-team input to "Regular-season
   games per team" (with a tooltip + footnote) so it's clear playoffs
